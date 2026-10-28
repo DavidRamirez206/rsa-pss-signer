@@ -17,7 +17,7 @@
 
     <!-- BC >= 1.78 because of CVE-2024-30171 -->
     <bouncycastle.version>1.80</bouncycastle.version>
-    <jackson.version>2.18.2</jackson.version>
+    <jackson.version>2.22.4</jackson.version>
     <junit.version>5.11.4</junit.version>
 
     <!-- `mvn test` skips slow tests and tests that need OpenSSL by default.
