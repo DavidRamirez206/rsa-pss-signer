@@ -16,7 +16,7 @@
     <main.class>co.edu.icesi.signer.cli.Main</main.class>
 
     <!-- BC >= 1.78 because of CVE-2024-30171 -->
-    <bouncycastle.version>1.80</bouncycastle.version>
+    <bouncycastle.version>1.86</bouncycastle.version>
     <jackson.version>2.18.2</jackson.version>
     <junit.version>5.11.4</junit.version>
 
