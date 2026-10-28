@@ -1,10 +1,25 @@
 version: 2
 updates:
+  # Minor and patch bumps arrive as one grouped PR per week;
+  # major bumps (possible breaking changes) still get their own PR.
   - package-ecosystem: maven
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      maven-minor-and-patch:
+        update-types: [minor, patch]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions-all:
+        patterns: ["*"]
