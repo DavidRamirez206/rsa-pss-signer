@@ -14,7 +14,6 @@ Full design document: [docs/design.md](docs/design.md).
 
 ## Authors
 
-- David Ramírez
 - Luis López
 - Catalina Bernal
 - Ismael Barrionuevo
