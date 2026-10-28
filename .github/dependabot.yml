@@ -1,9 +1,11 @@
 version: 2
 updates:
+  # Update PRs target develop, like any other change.
   # Minor and patch bumps arrive as one grouped PR per week;
   # major bumps (possible breaking changes) still get their own PR.
   - package-ecosystem: maven
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday
@@ -15,6 +17,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
       day: monday
