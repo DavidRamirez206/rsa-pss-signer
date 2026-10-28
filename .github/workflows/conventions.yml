@@ -25,7 +25,9 @@ jobs:
           printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/title.txt"
           scripts/check-commit-msg.sh "$RUNNER_TEMP/title.txt"
 
+      # Commits reaching main from develop were already checked in their own PRs
       - name: Check commit messages
+        if: github.head_ref != 'develop'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
