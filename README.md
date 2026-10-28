@@ -67,6 +67,10 @@ git tag v1.0.0 && git push origin v1.0.0
 
 Each archive is published with its `.sha256` checksum.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch flow, commit conventions and the English-only rule.
+
 ## License
 
 [MIT](LICENSE)
