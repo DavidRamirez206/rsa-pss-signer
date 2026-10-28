@@ -36,7 +36,7 @@ Flow:
 <type>(<optional scope>): <description>
 ```
 
-- **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
+- **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`, case-insensitive (`Feat:` is accepted)
 - **Scopes:** usually the package: `cli`, `core`, `crypto`, `format`, `keystore`, `io`
 - Subject in the imperative mood, at most 72 characters, no trailing period.
 - Add `!` after the type for breaking changes: `feat(format)!: change .sig header layout`
