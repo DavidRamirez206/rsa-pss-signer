@@ -10,6 +10,15 @@ RSA-PSS done right is not broken by attacking the math. Real attacks target trus
 the public key, unsigned metadata, error handling and the password, so those are
 where the defenses and the tests are focused.
 
+Full design document: [docs/design.md](docs/design.md).
+
+## Authors
+
+- David Ramírez
+- Luis López
+- Catalina Bernal
+- Ismael Barrionuevo
+
 ## Design highlights
 
 - **RSASSA-PSS** only (`SHA256withRSAandMGF1` / `SHA512withRSAandMGF1`), no PKCS#1 v1.5 fallback.
@@ -58,3 +67,7 @@ git tag v1.0.0 && git push origin v1.0.0
 ```
 
 Each archive is published with its `.sha256` checksum.
+
+## License
+
+[MIT](LICENSE)
