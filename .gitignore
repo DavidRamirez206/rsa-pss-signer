@@ -1,0 +1,38 @@
+# Build
+target/
+dist/
+
+# Key material: real and demo keys are never committed
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.jks
+# ...except deliberate test fixtures (fake or malformed keys)
+!src/test/resources/**/*.key
+!src/test/resources/**/*.pem
+
+# Demo outputs (generated before the presentation)
+demo/*
+!demo/README.md
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+nbproject/
+bin/
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+hs_err_pid*

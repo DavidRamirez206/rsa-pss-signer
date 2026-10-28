@@ -1,0 +1,122 @@
+name: Release
+
+# Builds the Windows and Linux executables with jlink + jpackage.
+# jpackage cannot cross-compile, so each OS is packaged on its own runner.
+# Triggered by pushing a v* tag (e.g. v1.0.0) or manually.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: rsa-pss-signer
+  MAIN_CLASS: co.edu.icesi.signer.cli.Main
+
+jobs:
+  package:
+    name: Package (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: windows-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build, test and copy dependencies
+        run: mvn -B verify
+
+      - name: Prepare jpackage input
+        run: |
+          mkdir -p target/package-input
+          cp target/${APP_NAME}.jar target/lib/*.jar target/package-input/
+
+      - name: Detect required JDK modules (jdeps)
+        id: modules
+        run: |
+          MODS=$(jdeps --ignore-missing-deps --print-module-deps \
+                 --multi-release 21 \
+                 --class-path 'target/lib/*' target/${APP_NAME}.jar)
+          echo "Modules: $MODS"
+          echo "list=$MODS" >> "$GITHUB_OUTPUT"
+
+      - name: Minimal runtime (jlink)
+        run: |
+          jlink --add-modules "${{ steps.modules.outputs.list }}" \
+                --strip-debug --no-header-files --no-man-pages \
+                --output target/runtime
+
+      # --win-console is required: without it System.console() is null on Windows
+      # and the program (by design) refuses to read the password.
+      - name: Executable (jpackage app-image)
+        run: |
+          EXTRA=()
+          if [ "$RUNNER_OS" = "Windows" ]; then EXTRA+=(--win-console); fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] || VERSION=0.0.0
+          jpackage --type app-image \
+                   --name "$APP_NAME" \
+                   --app-version "$VERSION" \
+                   --input target/package-input \
+                   --main-jar "${APP_NAME}.jar" \
+                   --main-class "$MAIN_CLASS" \
+                   --runtime-image target/runtime \
+                   --java-options "-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8" \
+                   --dest dist \
+                   "${EXTRA[@]}"
+
+      - name: Archive and compute SHA-256
+        run: |
+          cd dist
+          ARCHIVE="${APP_NAME}-${{ matrix.platform }}"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a -tzip "${ARCHIVE}.zip" "${APP_NAME}" > /dev/null
+            sha256sum "${ARCHIVE}.zip" > "${ARCHIVE}.zip.sha256"
+          else
+            tar -czf "${ARCHIVE}.tar.gz" "${APP_NAME}"
+            sha256sum "${ARCHIVE}.tar.gz" > "${ARCHIVE}.tar.gz.sha256"
+          fi
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-${{ matrix.platform }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

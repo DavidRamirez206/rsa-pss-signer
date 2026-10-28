@@ -1,0 +1,11 @@
+# Normalize line endings in the repository
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Test fixtures are compared byte for byte (hashes, signatures): git must not touch them
+src/test/resources/** -text -diff
+*.sig -text -diff
+*.bin -text -diff
