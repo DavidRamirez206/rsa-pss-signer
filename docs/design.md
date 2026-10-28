@@ -65,7 +65,7 @@ The verifier returns an `enum VerificationResult { VALID, INVALID, ERROR }`, **n
 
 *Rejected alternative:* PKCS#1 v1.5 (`SHA256withRSA`). It works, but PSS has a formal security proof (a reduction to the RSA problem in the random oracle model) and avoids the Bleichenbacher family of lax-parsing attacks. No "if PSS fails, try v1.5" *fallback* is implemented: accepting undecided schemes is the risk.
 
-**Implementation decision (important):** use the composite name **`SHA256withRSAandMGF1`** / **`SHA512withRSAandMGF1`** in `Signature.getInstance(...)`. This automatically binds the PSS parameters to the correct hash. With the plain name `"RSASSA-PSS"` you must call `setParameter(new PSSParameterSpec(...))` or a `SignatureException("Parameters required for RSASSA-PSS signature")` is thrown, and if you forget, `PSSParameterSpec.DEFAULT` uses **SHA-1**, not the intended hash. The composite name removes that footgun. *(See appendix, PSS parameters.)*
+**Implementation decision (important):** use `Signature.getInstance("RSASSA-PSS")` and **always** call `setParameter(...)` with an explicit `PSSParameterSpec` bound to the message hash. Without it a `SignatureException("Parameters required for RSASSA-PSS signature")` is thrown, and `PSSParameterSpec.DEFAULT` uses **SHA-1**, not the intended hash. The JDK has **no** composite names such as `SHA256withRSAandMGF1` (those come from Bouncy Castle and throw `NoSuchAlgorithmException` on the JDK). To remove the footgun, the only way to obtain a `Signature` is `PssParams.newSignature(HashAlg)`, which sets the parameters every time. *(See appendix, PSS parameters.)*
 
 ### 3. Strict allowlists
 
@@ -686,7 +686,7 @@ Key distinction for the whole presentation: **"no practical method is known" ≠
 | Risk                                                                | Impact                                     | Mitigation                                                                                                                                                                         |
 |---------------------------------------------------------------------|--------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Getting stuck on Bouncy Castle** (dense API, PKCS#8 encryption)   | Eats days in Phase 1/2                     | Isolate BC in `keystore` behind a small interface; first try generating/reading a `.key` and opening it with `openssl pkey` before moving on. Class names already verified in the appendix. |
-| **Wrongly set PSS parameters** (SHA-1 left as default)              | Non-interoperable or insecure signatures   | Use the composite name `SHA256withRSAandMGF1`; test that checks interop with OpenSSL (T-6.1).                                                                                      |
+| **Wrongly set PSS parameters** (SHA-1 left as default)              | Non-interoperable or insecure signatures   | Obtain every `Signature` through `PssParams.newSignature`; unit test that the parameters are not the SHA-1 default; interop test with OpenSSL (T-6.1).                            |
 | **Not enough time**                                                 | Extensions are not reached                 | Cut at Phase 3: it already satisfies the assignment with the full security story. Phases 4–6 are optional and independent.                                                         |
 | **Scope creep** (mini-PKI, RFC 3161, GUI grow unchecked)            | The core is neglected                      | Rule: nothing from Phase 5/6 starts until Phase 3 is green. Each extension is a module with its own "done" criterion.                                                              |
 | **`System.console()` null in the IDE** ruins the demo               | Visible password or program that won't run | Always run from a real terminal; the demo uses the terminal, not the IDE (checklist). On Windows, the executable is packaged with `--win-console`.                                  |
@@ -761,11 +761,11 @@ The relevant CVE is **CVE-2024-30171** (Marvin attack, timing side channel in **
 
 ### JDK default PSS parameters — **Confirmed (with an operational caveat)**
 
-`PSSParameterSpec.DEFAULT` uses **SHA-1 / MGF1-SHA1 / salt 20 / trailer 1**. With `Signature.getInstance("RSASSA-PSS")` you must call `setParameter(new PSSParameterSpec(...))` or a `SignatureException("Parameters required for RSASSA-PSS signature")` is thrown. **Recommendation:** use the composite name `SHA256withRSAandMGF1` / `SHA512withRSAandMGF1`, which binds the parameters to the correct hash and avoids the risk of ending up with SHA-1. [PSSParameterSpec (Javadoc)](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/security/spec/PSSParameterSpec.html)
+`PSSParameterSpec.DEFAULT` uses **SHA-1 / MGF1-SHA1 / salt 20 / trailer 1**. With `Signature.getInstance("RSASSA-PSS")` you must call `setParameter(new PSSParameterSpec(...))` or a `SignatureException("Parameters required for RSASSA-PSS signature")` is thrown. **Recommendation:** always set the parameters explicitly through `PssParams`. [PSSParameterSpec (Javadoc)](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/security/spec/PSSParameterSpec.html)
 
-### SHA-3 with PSS — **To verify**
+### No composite PSS names in the JDK — **Confirmed (corrected from an earlier draft)**
 
-The allowlist includes SHA3-256 and SHA3-512, but only `SHA256withRSAandMGF1` / `SHA512withRSAandMGF1` are covered above. Confirm that the provider in use accepts `SHA3-256withRSAandMGF1` / `SHA3-512withRSAandMGF1`; otherwise, set the parameters explicitly with `PSSParameterSpec` (via `PssParams`) or drop SHA-3 from the allowlist.
+An earlier draft recommended `SHA256withRSAandMGF1` / `SHA512withRSAandMGF1`. Tested on OpenJDK 17: all four composite names (`SHA256`, `SHA512`, `SHA3-256`, `SHA3-512` + `withRSAandMGF1`) throw `NoSuchAlgorithmException`; they are Bouncy Castle names. Plain `RSASSA-PSS` (provider `SunRsaSign`) with an explicit `PSSParameterSpec` signs and verifies with all four allowed hashes, **including SHA3-256 and SHA3-512**, so SHA-3 stays in the allowlist. Covered by `PssParamsTest`.
 
 ### Bouncy Castle class names used — **Confirmed**
 
