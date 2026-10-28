@@ -15,6 +15,8 @@ if [[ "$subject" =~ ^(Merge|Revert\ \") ]]; then
 fi
 
 types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
+# Case-insensitive so that "Feat: ..." or "Chore(cli): ..." are accepted too
+shopt -s nocasematch
 if ! [[ "$subject" =~ ^($types)(\([a-z0-9._-]+\))?!?:\ [^[:space:]].*$ ]]; then
     cat >&2 <<EOF
 error: commit subject does not follow Conventional Commits:
