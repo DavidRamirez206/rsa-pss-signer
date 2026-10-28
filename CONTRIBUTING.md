@@ -56,6 +56,6 @@ Pull request titles follow the same format, since squash merges use them as the 
 Everything in the repository is written in **English**: code, identifiers, comments,
 documentation, commit messages and PR titles.
 
-CI flags added lines that contain Spanish-only characters (`á é í ó ú ñ ¿ ¡`) or
+CI flags added lines that contain Spanish-only characters (accented vowels, the letter n with tilde, inverted question and exclamation marks) or
 common Spanish words. It is a heuristic, not a language detector. If a proper name
 triggers it, add the name to `.github/english-allowlist.txt`.
