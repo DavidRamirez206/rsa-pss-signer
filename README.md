@@ -20,7 +20,7 @@ Full design document: [docs/design.md](docs/design.md).
 
 ## Design highlights
 
-- **RSASSA-PSS** only (`SHA256withRSAandMGF1` / `SHA512withRSAandMGF1`), no PKCS#1 v1.5 fallback.
+- **RSASSA-PSS** only, with explicit parameters (never the SHA-1 defaults), no PKCS#1 v1.5 fallback.
 - **Strict allowlists**: 2048/3072/4096-bit keys, e = 65537, SHA-256/512 and SHA3-256/512.
 - **Three verification outcomes**: `VALID` / `INVALID` / `ERROR`, mapped to exit codes **0 / 1 / 2**. No exception ever becomes `VALID`.
 - **Signed canonical header** in the `.sig` file (version, hash, PSS params, key fingerprint, file name, signer, date).
