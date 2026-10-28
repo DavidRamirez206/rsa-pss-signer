@@ -1,0 +1,46 @@
+name: Conventions
+
+# Enforces Conventional Commits and English-only text on every pull request.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    name: Commit and language conventions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # With squash merges the PR title becomes the commit message
+      - name: Check PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/title.txt"
+          scripts/check-commit-msg.sh "$RUNNER_TEMP/title.txt"
+
+      - name: Check commit messages
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          for sha in $(git rev-list "$BASE..$HEAD"); do
+            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/msg.txt"
+            echo "::group::$(git log -1 --format='%h %s' "$sha")"
+            scripts/check-commit-msg.sh "$RUNNER_TEMP/msg.txt" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: Check added text is in English
+        run: >-
+          scripts/check-diff-english.sh
+          ${{ github.event.pull_request.base.sha }}
+          ${{ github.event.pull_request.head.sha }}

@@ -2,7 +2,7 @@
 
 2026-10-28 · University project · Java
 
-**Authors:** David Ramírez, Luis López, Catalina Bernal, Ismael Barrionuevo
+**Authors:** Luis López, Catalina Bernal, Ismael Barrionuevo
 
 ## a) Summary and scope
 
