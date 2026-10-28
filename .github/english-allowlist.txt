@@ -1,0 +1,2 @@
+# Words exempt from the English-only check (proper names), one per line, case-sensitive.
+López
