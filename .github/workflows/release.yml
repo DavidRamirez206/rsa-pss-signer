@@ -156,7 +156,9 @@ jobs:
           cygpath -w "$RUNNER_TEMP/wix" >> "$GITHUB_PATH"
 
       # Installs for the current user, so it needs no administrator rights. The upgrade
-      # UUID must never change: it is what lets a new version replace an installed one.
+      # 51316a28-5a51-48ba-be71-fd256df7bab1 must never change: it is what lets a new version replace an installed one.
+      # The interface is the main launcher because shortcuts follow it, and the name is
+      # what people see on the shortcut and in the list of installed programs.
       - name: Windows installer (jpackage exe)
         if: runner.os == 'Windows' && needs.version.outputs.installer == 'true'
         env:
@@ -165,23 +167,28 @@ jobs:
           VERSION="${RELEASE_TAG#v}"
           VERSION="${VERSION%%-*}"
           jpackage --type exe \
-                   --app-image "dist/${APP_NAME}" \
-                   --name "$APP_NAME" \
+                   --name "RSA-PSS Signer" \
                    --app-version "$VERSION" \
                    --vendor "ICESI" \
                    --description "RSA-PSS file signer and verifier" \
+                   --input target/package-input \
+                   --main-jar "${APP_NAME}.jar" \
+                   --main-class co.edu.icesi.signer.gui.GuiMain \
+                   --runtime-image target/runtime \
+                   --java-options "-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8" \
+                   --icon packaging/icon/app.ico \
+                   --add-launcher "${APP_NAME}=packaging/installer-cli-launcher.properties" \
                    --win-per-user-install \
+                   --win-shortcut \
+                   --win-menu \
+                   --win-menu-group "RSA-PSS Signer" \
                    --win-upgrade-uuid 51316a28-5a51-48ba-be71-fd256df7bab1 \
                    --temp target/jpackage-temp \
                    --dest target/installer
-          echo "== temp files"; find target/jpackage-temp -maxdepth 2 -type f | head -30
-          echo "== app file"; cat "dist/${APP_NAME}/app/.jpackage.xml" || true
-          echo "== shortcut lines"; grep -rn 'Shortcut' target/jpackage-temp/config | cut -c1-300 | head -20 || true
-          echo "== with global flags"
-          jpackage --type exe --app-image "dist/${APP_NAME}" --name "$APP_NAME" --app-version "$VERSION" --vendor "ICESI" \
-                   --win-per-user-install --win-shortcut --win-menu --temp target/temp2 --dest target/installer2
-          grep -rn 'Shortcut' target/temp2/config | cut -c1-300 | head -20 || true
-          exit 1
+          SHORTCUTS="$(grep -rhoE '<Shortcut [^>]*' target/jpackage-temp/config | grep -oE ' Name="[^"]*"' | sort | uniq -c)"
+          echo "Shortcuts in the installer: $SHORTCUTS"
+          # One on the desktop and one in the menu, both to the interface
+          [ "$(echo $SHORTCUTS)" = '2 Name="RSA-PSS Signer"' ]
           INSTALLER="${APP_NAME}-${{ matrix.platform }}-setup.exe"
           mv target/installer/*.exe "dist/${INSTALLER}"
           cd dist
