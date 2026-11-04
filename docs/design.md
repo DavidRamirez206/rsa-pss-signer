@@ -129,11 +129,11 @@ Base package: `co.edu.icesi.signer`.
 | Package    | Class                       | Responsibility                                                                                         |
 |------------|-----------------------------|--------------------------------------------------------------------------------------------------------|
 | `cli`      | `Main`                      | `main(args)` → delegates to `run(args)`; catches the unexpected and returns 2.                         |
-| `cli`      | `Cli`                       | `run(String[]) -> int`; parses the sub-option (1/2/3), calls the service, prints, and maps to an exit code. |
+| `cli`      | `Cli`                       | `run(String[]) -> int`; parses the `keygen` / `sign` / `verify` subcommands, calls the service, prints, and maps to an exit code. |
 | `cli`      | `PasswordProvider`          | Interface for reading `char[]`; real implementation with `System.console()`, injectable test implementation. |
 | `crypto`   | `KeyPairService`            | Generates the RSA pair with explicit parameters; computes the fingerprint.                             |
 | `crypto`   | `SigningService`            | Signs: builds the canonical message and produces the signature bytes.                                  |
-| `crypto`   | `VerificationService`       | Verifies: returns `VerificationResult`. It is the heart of the system.                                 |
+| `crypto`   | `VerificationService`       | Verifies: returns a `VerificationOutcome` (result, detail, fingerprint). It is the heart of the system. |
 | `crypto`   | `HashAlg` (enum)            | SHA-256 / SHA-512 / SHA3-256 / SHA3-512; maps to JCA names and lengths.                                |
 | `crypto`   | `PssParams`                 | Encapsulates the fixed PSS parameters and builds the `PSSParameterSpec`.                               |
 | `format`   | `SigFile`                   | `.sig` model: fields, canonical serialization, parsing with up-front validation.                       |
@@ -145,6 +145,7 @@ Base package: `co.edu.icesi.signer`.
 | `io`       | `AtomicFileWriter`          | Atomic write (temp file + `ATOMIC_MOVE`), 600 permissions.                                             |
 | `io`       | `FileHasher`                | Streaming hash of an `InputStream`.                                                                    |
 | `core`     | `VerificationResult` (enum) | `VALID(0)`, `INVALID(1)`, `ERROR(2)`.                                                                  |
+| `core`     | `VerificationOutcome`       | A `VerificationResult` plus its explanation and the key fingerprint.                                   |
 
 ### The result enum
 

@@ -58,7 +58,7 @@ public final class PrivateKeyStore {
     }
 
     /** Lower iteration counts are for tests and the brute-force demo only. */
-    PrivateKeyStore(int iterations) {
+    public PrivateKeyStore(int iterations) {
         this.iterations = iterations;
     }
 
