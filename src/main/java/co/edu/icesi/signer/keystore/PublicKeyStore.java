@@ -1,5 +1,6 @@
 package co.edu.icesi.signer.keystore;
 
+import co.edu.icesi.signer.crypto.KeyPairService;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
@@ -37,7 +38,8 @@ public final class PublicKeyStore {
     /**
      * Reads an RSA public key.
      *
-     * @throws InvalidKeyException if the file is not a PEM-encoded RSA public key
+     * @throws InvalidKeyException if the file is not a PEM-encoded RSA public key, or
+     *     the key is outside the allowlists for size and exponent
      */
     public static RSAPublicKey read(Path file) throws IOException, InvalidKeyException {
         // Latin-1 never fails on binary input: such a file simply contains no PEM object
@@ -51,11 +53,14 @@ public final class PublicKeyStore {
         if (pem == null || !PEM_TYPE.equals(pem.getType())) {
             throw new InvalidKeyException(file.getFileName() + " is not a PEM public key");
         }
+        RSAPublicKey publicKey;
         try {
-            return (RSAPublicKey) KeyFactory.getInstance("RSA")
+            publicKey = (RSAPublicKey) KeyFactory.getInstance("RSA")
                     .generatePublic(new X509EncodedKeySpec(pem.getContent()));
         } catch (GeneralSecurityException e) {
             throw new InvalidKeyException(file.getFileName() + " is not an RSA public key", e);
         }
+        KeyPairService.requireAllowed(publicKey);
+        return publicKey;
     }
 }
