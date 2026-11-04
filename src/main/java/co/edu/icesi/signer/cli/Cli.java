@@ -7,6 +7,7 @@ import co.edu.icesi.signer.crypto.KeyPairService;
 import co.edu.icesi.signer.crypto.SigningService;
 import co.edu.icesi.signer.crypto.VerificationService;
 import co.edu.icesi.signer.format.SigFile;
+import co.edu.icesi.signer.io.AtomicFileWriter;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
 import co.edu.icesi.signer.keystore.PublicKeyStore;
 import co.edu.icesi.signer.keystore.WrongPasswordException;
@@ -17,7 +18,6 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.interfaces.RSAPrivateCrtKey;
@@ -186,7 +186,7 @@ public final class Cli {
         } catch (IllegalArgumentException e) {
             throw new UsageException(e.getMessage());
         }
-        Files.write(sigFile, sig.toJson(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        AtomicFileWriter.writePublic(sigFile, sig.toJson());
 
         out.println("Signature:   " + sigFile);
         out.println("Fingerprint: " + sig.header().keyFingerprint());
