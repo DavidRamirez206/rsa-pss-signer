@@ -96,8 +96,8 @@ Merging `develop` into `main` publishes a release automatically; see
 
 Each file is published with its `.sha256` checksum.
 
-Betas, published from `develop`, also include `rsa-pss-signer-windows-x64-setup.exe`: an
-installer that adds the program with its icon and shortcuts, without administrator rights.
+Windows also gets `rsa-pss-signer-windows-x64-setup.exe`: an installer that adds the
+program with its icon and shortcuts, without administrator rights.
 
 ## Contributing
 

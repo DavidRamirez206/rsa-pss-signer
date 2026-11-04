@@ -1,7 +1,7 @@
 name: Release
 
-# Publishes a release when develop is merged into main, and a beta (a prerelease with
-# the Windows installer too) on every push to develop: the version comes from the
+# Publishes a release when develop is merged into main, and a beta (a prerelease) on
+# every push to develop: the version comes from the
 # Conventional Commits since the last release (see scripts/next-version.sh), and
 # commits that do not change the program publish nothing.
 # Builds the Windows and Linux executables with jlink + jpackage, which cannot
@@ -31,7 +31,6 @@ jobs:
     outputs:
       tag: ${{ steps.next.outputs.tag }}
       beta: ${{ steps.next.outputs.beta }}
-      installer: ${{ steps.next.outputs.installer }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,14 +45,11 @@ jobs:
             beta=true
             args=(--beta)
           fi
-          installer=true
-          if [ "$GITHUB_REF" = "refs/heads/main" ]; then installer=false; fi
           tag="$(scripts/next-version.sh "${args[@]}")"
           echo "Next release: ${tag:-none}"
           {
             echo "tag=$tag"
             echo "beta=$beta"
-            echo "installer=$installer"
           } >> "$GITHUB_OUTPUT"
 
   package:
@@ -147,7 +143,7 @@ jobs:
 
       # jpackage on JDK 21 builds Windows installers with WiX 3
       - name: Install WiX
-        if: runner.os == 'Windows' && needs.version.outputs.installer == 'true'
+        if: runner.os == 'Windows'
         run: |
           cd "$RUNNER_TEMP"
           curl -fsSL -o wix.zip https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip
@@ -160,7 +156,7 @@ jobs:
       # The interface is the main launcher because shortcuts follow it, and the name is
       # what people see on the shortcut and in the list of installed programs.
       - name: Windows installer (jpackage exe)
-        if: runner.os == 'Windows' && needs.version.outputs.installer == 'true'
+        if: runner.os == 'Windows'
         env:
           RELEASE_TAG: ${{ needs.version.outputs.tag || 'v0.0.0' }}
         run: |
