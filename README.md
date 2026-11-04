@@ -40,6 +40,23 @@ co.edu.icesi.signer
 └── io        AtomicFileWriter, FileHasher
 ```
 
+## Usage
+
+```bash
+rsa-pss-signer keygen --out ana [--bits 2048|3072|4096]
+rsa-pss-signer sign contract.txt --key ana.key --signer "Ana Perez" [--hash SHA-256] [--out contract.txt.sig]
+rsa-pss-signer verify contract.txt --sig contract.txt.sig --pub ana.pub
+```
+
+`verify` exits with **0** (`VALID`), **1** (`INVALID`) or **2** (`ERROR`). Always compare the
+displayed fingerprint with the signer through an independent channel: a valid signature
+proves who holds the key, not who that person is.
+
+Passwords are read from the console without echo and are never command-line arguments, so
+run the program from a real terminal rather than an IDE.
+
+From a source build, run `java -jar target/rsa-pss-signer.jar ...` after `mvn package`.
+
 ## Requirements
 
 - JDK 17 or later
@@ -59,11 +76,8 @@ Coverage report: `target/site/jacoco/index.html`.
 
 Native executables for Windows and Linux are produced by the **Release** workflow
 (`jlink` + `jpackage`, with a bundled Java runtime, so no Java install needed).
-Push a tag to build them:
-
-```bash
-git tag v1.0.0 && git push origin v1.0.0
-```
+Merging `develop` into `main` publishes a release automatically; see
+[CONTRIBUTING.md](CONTRIBUTING.md#releases) for how the version is chosen.
 
 Each archive is published with its `.sha256` checksum.
 
