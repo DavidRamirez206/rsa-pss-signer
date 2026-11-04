@@ -2,6 +2,7 @@ package co.edu.icesi.signer.crypto;
 
 import java.security.GeneralSecurityException;
 import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -42,6 +43,21 @@ public final class KeyPairService {
             return generator.generateKeyPair();
         } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException e) {
             throw new IllegalStateException("RSA key generation is not available in this Java runtime", e);
+        }
+    }
+
+    /**
+     * Checks a key against the allowlists: an allowed modulus size and exponent 65537.
+     *
+     * @throws InvalidKeyException if the key is outside the allowlists
+     */
+    public static void requireAllowed(RSAPublicKey publicKey) throws InvalidKeyException {
+        int bits = publicKey.getModulus().bitLength();
+        if (!ALLOWED_KEY_SIZES.contains(bits)) {
+            throw new InvalidKeyException("Key size not allowed: " + bits + " bits");
+        }
+        if (!RSAKeyGenParameterSpec.F4.equals(publicKey.getPublicExponent())) {
+            throw new InvalidKeyException("Public exponent not allowed: " + publicKey.getPublicExponent());
         }
     }
 

@@ -5,9 +5,9 @@ import co.edu.icesi.signer.core.VerificationResult;
 import co.edu.icesi.signer.format.CanonicalHeader;
 import co.edu.icesi.signer.format.SigFile;
 import co.edu.icesi.signer.format.SigValidationException;
+import co.edu.icesi.signer.io.SafeFileReader;
 import co.edu.icesi.signer.keystore.PublicKeyStore;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.InvalidKeyException;
 import java.security.Signature;
@@ -36,7 +36,7 @@ public final class VerificationService {
 
         SigFile sig;
         try {
-            sig = SigFile.parse(Files.readAllBytes(sigFile));
+            sig = SigFile.parse(SafeFileReader.read(sigFile, SigFile.MAX_FILE_SIZE));
         } catch (IOException | SigValidationException e) {
             return error("Could not read the signature file: " + describe(e), fingerprint);
         }
@@ -48,6 +48,11 @@ public final class VerificationService {
         String fingerprint = KeyPairService.fingerprint(publicKey);
         CanonicalHeader header = sig.header();
 
+        try {
+            KeyPairService.requireAllowed(publicKey);
+        } catch (InvalidKeyException e) {
+            return error("The public key cannot be used: " + e.getMessage(), fingerprint);
+        }
         if (!fingerprint.equals(header.keyFingerprint())) {
             return error("This signature was made with key " + header.keyFingerprint()
                     + ", not with the key supplied", fingerprint);

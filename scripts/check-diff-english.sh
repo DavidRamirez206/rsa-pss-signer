@@ -8,11 +8,12 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 base="$1"
 head="$2"
 
-# Test fixtures are raw data; the word list and allowlist contain Spanish on purpose
+# Test fixtures are raw data; the word list, allowlist and interface translation contain Spanish on purpose
 excludes=(
     ':(exclude)src/test/resources'
     ':(exclude).github/english-allowlist.txt'
     ':(exclude)scripts/check-english.sh'
+    ':(exclude)src/main/resources/i18n/messages_es.properties'
 )
 
 status=0

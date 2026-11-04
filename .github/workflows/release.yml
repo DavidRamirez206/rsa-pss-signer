@@ -106,6 +106,7 @@ jobs:
                    --main-class "$MAIN_CLASS" \
                    --runtime-image target/runtime \
                    --java-options "-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8" \
+                   --add-launcher "${APP_NAME}-gui=packaging/gui-launcher.properties" \
                    --dest dist \
                    "${EXTRA[@]}"
 

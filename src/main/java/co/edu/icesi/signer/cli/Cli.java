@@ -7,6 +7,7 @@ import co.edu.icesi.signer.crypto.KeyPairService;
 import co.edu.icesi.signer.crypto.SigningService;
 import co.edu.icesi.signer.crypto.VerificationService;
 import co.edu.icesi.signer.format.SigFile;
+import co.edu.icesi.signer.io.AtomicFileWriter;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
 import co.edu.icesi.signer.keystore.PublicKeyStore;
 import co.edu.icesi.signer.keystore.WrongPasswordException;
@@ -17,14 +18,10 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.time.Clock;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -40,7 +37,7 @@ import java.util.Set;
  */
 public final class Cli {
 
-    static final int MIN_PASSWORD_LENGTH = 12;
+    public static final int MIN_PASSWORD_LENGTH = 12;
 
     private static final int EXIT_OK = VerificationResult.VALID.exitCode();
     private static final int EXIT_ERROR = VerificationResult.ERROR.exitCode();
@@ -177,16 +174,14 @@ public final class Cli {
             Arrays.fill(password, '\0');
         }
 
-        String signedAt = OffsetDateTime.now(clock)
-                .truncatedTo(ChronoUnit.SECONDS)
-                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        String signedAt = SigningService.timestamp(clock);
         SigFile sig;
         try {
             sig = SigningService.sign(file, privateKey, hash, signer, signedAt);
         } catch (IllegalArgumentException e) {
             throw new UsageException(e.getMessage());
         }
-        Files.write(sigFile, sig.toJson(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        AtomicFileWriter.writePublic(sigFile, sig.toJson());
 
         out.println("Signature:   " + sigFile);
         out.println("Fingerprint: " + sig.header().keyFingerprint());
