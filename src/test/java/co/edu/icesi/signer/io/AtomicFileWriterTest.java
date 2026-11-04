@@ -15,6 +15,7 @@ import java.nio.file.attribute.AclEntry;
 import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
@@ -58,11 +59,16 @@ class AtomicFileWriterTest {
 
     @Test
     void relativePathsWork() throws IOException {
-        Path target = Path.of("").toAbsolutePath().relativize(dir.resolve("relative.bin"));
+        // Inside the working directory: on Windows the temp folder may be on another drive
+        Path target = Path.of("target", "relative-" + UUID.randomUUID() + ".bin");
+        Files.createDirectories(target.getParent());
+        try {
+            AtomicFileWriter.writePublic(target, CONTENT);
 
-        AtomicFileWriter.writePublic(target, CONTENT);
-
-        assertArrayEquals(CONTENT, Files.readAllBytes(dir.resolve("relative.bin")));
+            assertArrayEquals(CONTENT, Files.readAllBytes(target));
+        } finally {
+            Files.deleteIfExists(target);
+        }
     }
 
     // T-5.7: an existing file, such as the input itself, is never replaced
