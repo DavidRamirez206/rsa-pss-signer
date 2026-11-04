@@ -106,9 +106,9 @@ Always `char[]`, cleared with `Arrays.fill(pwd, '\0')` in a `finally`, **never a
 
 - Permissions **600 from creation** (`Files.createFile` with `PosixFilePermissions.asFileAttribute(...)`), not create-then-`chmod` (race window).
 
-- **Atomic write**: temp file in the same directory + `Files.move(..., ATOMIC_MOVE)`. A partial `.sig` is never left behind if something fails halfway.
+- **Atomic write**: temp file in the same directory, then a hard link to the final name. A hard link is atomic and, unlike `ATOMIC_MOVE`, fails if the name is taken; `ATOMIC_MOVE` is the fallback on file systems without hard links. A partial `.sig` is never left behind if something fails halfway.
 
-- **No overwriting** without confirmation: outputs use `CREATE_NEW`.
+- **No overwriting**: an existing file or symbolic link at the output path is an error.
 
 ### 7. Public key fingerprint always visible
 
@@ -144,6 +144,7 @@ Base package: `co.edu.icesi.signer`.
 | `keystore` | `WrongPasswordException`    | Wrong password → controlled message, never a stack trace.                                              |
 | `io`       | `AtomicFileWriter`          | Atomic write (temp file + `ATOMIC_MOVE`), 600 permissions.                                             |
 | `io`       | `FileHasher`                | Streaming hash of an `InputStream`.                                                                    |
+| `io`       | `SafeFileReader`            | Reads only regular files, with a size limit, so a FIFO or huge file cannot hang the program.           |
 | `core`     | `VerificationResult` (enum) | `VALID(0)`, `INVALID(1)`, `ERROR(2)`.                                                                  |
 | `core`     | `VerificationOutcome`       | A `VerificationResult` plus its explanation and the key fingerprint.                                   |
 
