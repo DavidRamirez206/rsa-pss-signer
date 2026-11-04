@@ -17,6 +17,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Test the version calculation
+        run: scripts/test-next-version.sh
+
       # With squash merges the PR title becomes the commit message
       - name: Check PR title
         env:

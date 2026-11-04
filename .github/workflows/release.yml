@@ -1,14 +1,15 @@
 name: Release
 
-# Publishes a release when develop is merged into main: the version comes from the
+# Publishes a release when develop is merged into main, and a beta (a prerelease) on
+# every push to develop: the version comes from the
 # Conventional Commits since the last release (see scripts/next-version.sh), and
 # commits that do not change the program publish nothing.
 # Builds the Windows and Linux executables with jlink + jpackage, which cannot
 # cross-compile, so each OS is packaged on its own runner.
-# Running it manually builds the executables without publishing anything.
+# Running it manually builds the executables and the installer without publishing anything.
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -29,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.next.outputs.tag }}
+      beta: ${{ steps.next.outputs.beta }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,9 +39,18 @@ jobs:
       - name: Next version from commits
         id: next
         run: |
-          tag="$(scripts/next-version.sh)"
+          beta=false
+          args=()
+          if [ "$GITHUB_REF" = "refs/heads/develop" ]; then
+            beta=true
+            args=(--beta)
+          fi
+          tag="$(scripts/next-version.sh "${args[@]}")"
           echo "Next release: ${tag:-none}"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$tag"
+            echo "beta=$beta"
+          } >> "$GITHUB_OUTPUT"
 
   package:
     name: Package (${{ matrix.os }})
@@ -96,14 +107,21 @@ jobs:
           RELEASE_TAG: ${{ needs.version.outputs.tag || 'v0.0.0' }}
         run: |
           EXTRA=()
-          if [ "$RUNNER_OS" = "Windows" ]; then EXTRA+=(--win-console); fi
+          ICON=packaging/icon/app.png
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            EXTRA+=(--win-console)
+            ICON=packaging/icon/app.ico
+          fi
+          # Installers only accept numbers, so a beta builds as the version it leads to
           VERSION="${RELEASE_TAG#v}"
+          VERSION="${VERSION%%-*}"
           jpackage --type app-image \
                    --name "$APP_NAME" \
                    --app-version "$VERSION" \
                    --input target/package-input \
                    --main-jar "${APP_NAME}.jar" \
                    --main-class "$MAIN_CLASS" \
+                   --icon "$ICON" \
                    --runtime-image target/runtime \
                    --java-options "-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8" \
                    --add-launcher "${APP_NAME}-gui=packaging/gui-launcher.properties" \
@@ -123,12 +141,63 @@ jobs:
           fi
           ls -la
 
+      # jpackage on JDK 21 builds Windows installers with WiX 3
+      - name: Install WiX
+        if: runner.os == 'Windows'
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o wix.zip https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip
+          echo "6ac824e1642d6f7277d0ed7ea09411a508f6116ba6fae0aa5f2c7daa2ff43d31 *wix.zip" | sha256sum -c -
+          7z x wix.zip -owix > /dev/null
+          cygpath -w "$RUNNER_TEMP/wix" >> "$GITHUB_PATH"
+
+      # Installs for the current user, so it needs no administrator rights. The upgrade
+      # 51316a28-5a51-48ba-be71-fd256df7bab1 must never change: it is what lets a new version replace an installed one.
+      # The interface is the main launcher because shortcuts follow it, and the name is
+      # what people see on the shortcut and in the list of installed programs.
+      - name: Windows installer (jpackage exe)
+        if: runner.os == 'Windows'
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag || 'v0.0.0' }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          VERSION="${VERSION%%-*}"
+          jpackage --type exe \
+                   --name "RSA-PSS Signer" \
+                   --app-version "$VERSION" \
+                   --vendor "ICESI" \
+                   --description "RSA-PSS file signer and verifier" \
+                   --input target/package-input \
+                   --main-jar "${APP_NAME}.jar" \
+                   --main-class co.edu.icesi.signer.gui.GuiMain \
+                   --runtime-image target/runtime \
+                   --java-options "-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8" \
+                   --icon packaging/icon/app.ico \
+                   --add-launcher "${APP_NAME}=packaging/installer-cli-launcher.properties" \
+                   --win-per-user-install \
+                   --win-shortcut \
+                   --win-menu \
+                   --win-menu-group "RSA-PSS Signer" \
+                   --win-upgrade-uuid 51316a28-5a51-48ba-be71-fd256df7bab1 \
+                   --temp target/jpackage-temp \
+                   --dest target/installer
+          SHORTCUTS="$(grep -rhoE '<Shortcut [^>]*' target/jpackage-temp/config | grep -oE ' Name="[^"]*"' | sort | uniq -c)"
+          echo "Shortcuts in the installer: $SHORTCUTS"
+          # One on the desktop and one in the menu, both to the interface
+          [ "$(echo $SHORTCUTS)" = '2 Name="RSA-PSS Signer"' ]
+          INSTALLER="${APP_NAME}-${{ matrix.platform }}-setup.exe"
+          mv target/installer/*.exe "dist/${INSTALLER}"
+          cd dist
+          sha256sum "$INSTALLER" > "${INSTALLER}.sha256"
+          ls -la
+
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP_NAME }}-${{ matrix.platform }}
           path: |
             dist/*.zip
             dist/*.tar.gz
+            dist/*.exe
             dist/*.sha256
           if-no-files-found: error
 
@@ -152,3 +221,5 @@ jobs:
           target_commitish: ${{ github.sha }}
           files: dist/*
           generate_release_notes: true
+          prerelease: ${{ needs.version.outputs.beta == 'true' }}
+          make_latest: ${{ needs.version.outputs.beta == 'true' && 'false' || 'true' }}
