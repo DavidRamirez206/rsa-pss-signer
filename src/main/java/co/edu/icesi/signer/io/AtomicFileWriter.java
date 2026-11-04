@@ -39,24 +39,41 @@ public final class AtomicFileWriter {
 
     /** Writes a file only its owner can access: mode 600 on POSIX, an owner-only ACL on Windows. */
     public static void writePrivate(Path target, byte[] content) throws IOException {
-        write(target, content, privateAttributes(target));
+        write(target, content, privateAttributes(target), false);
     }
 
     /** Writes a file holding no secrets: mode 644 on POSIX, default permissions elsewhere. */
     public static void writePublic(Path target, byte[] content) throws IOException {
-        FileAttribute<?>[] attributes = supportsPosix(target)
-                ? new FileAttribute<?>[] {PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-r--r--"))}
-                : new FileAttribute<?>[0];
-        write(target, content, attributes);
+        write(target, content, publicAttributes(target), false);
     }
 
-    private static void write(Path target, byte[] content, FileAttribute<?>[] attributes) throws IOException {
+    /**
+     * Like {@link #writePublic}, but replaces an existing regular file, all at once. Only
+     * for when the user has agreed. A symbolic link or anything else at that path is refused.
+     */
+    public static void replacePublic(Path target, byte[] content) throws IOException {
+        write(target, content, publicAttributes(target), true);
+    }
+
+    private static FileAttribute<?>[] publicAttributes(Path target) {
+        return supportsPosix(target)
+                ? new FileAttribute<?>[] {PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-r--r--"))}
+                : new FileAttribute<?>[0];
+    }
+
+    private static void write(Path target, byte[] content, FileAttribute<?>[] attributes, boolean replace)
+            throws IOException {
         Path absolute = target.toAbsolutePath();
         Path directory = absolute.getParent();
         if (directory == null || !Files.isDirectory(directory)) {
             throw new NoSuchFileException(String.valueOf(directory));
         }
-        requireAbsent(absolute, target);
+        if (!replace) {
+            requireAbsent(absolute, target);
+        } else if (Files.exists(absolute, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isRegularFile(absolute, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException(target + " is not a regular file");
+        }
 
         Path temp = directory.resolve("." + absolute.getFileName() + "." + UUID.randomUUID() + ".tmp");
         try {
@@ -68,7 +85,11 @@ public final class AtomicFileWriter {
                 }
                 channel.force(true);
             }
-            publish(temp, absolute, target);
+            if (replace) {
+                Files.move(temp, absolute, StandardCopyOption.ATOMIC_MOVE);
+            } else {
+                publish(temp, absolute, target);
+            }
         } finally {
             Files.deleteIfExists(temp);
         }

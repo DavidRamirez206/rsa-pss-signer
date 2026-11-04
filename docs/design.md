@@ -108,7 +108,7 @@ Always `char[]`, cleared with `Arrays.fill(pwd, '\0')` in a `finally`, **never a
 
 - **Atomic write**: temp file in the same directory, then a hard link to the final name. A hard link is atomic and, unlike `ATOMIC_MOVE`, fails if the name is taken; `ATOMIC_MOVE` is the fallback on file systems without hard links. A partial `.sig` is never left behind if something fails halfway.
 
-- **No overwriting**: an existing file or symbolic link at the output path is an error.
+- **No overwriting**: an existing file or symbolic link at the output path is an error. The one exception is a signature in the graphical interface, which asks first and replaces it atomically; keys are never replaced.
 
 ### 7. Public key fingerprint always visible
 

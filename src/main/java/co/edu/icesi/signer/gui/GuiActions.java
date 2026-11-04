@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
@@ -87,7 +88,25 @@ final class GuiActions {
         }
     }
 
+    /** Whether signing this file would replace a signature that already exists. */
+    boolean signatureExists(String file) {
+        if (file.isBlank()) {
+            return false;
+        }
+        try {
+            return Files.exists(Path.of(file.strip() + ".sig"), LinkOption.NOFOLLOW_LINKS);
+        } catch (InvalidPathException e) {
+            return false;
+        }
+    }
+
     Signature sign(String file, String key, String signer, HashAlg hash, char[] password) throws ActionFailure {
+        return sign(file, key, signer, hash, password, false);
+    }
+
+    /** @param overwrite whether the user agreed to replace an existing signature */
+    Signature sign(String file, String key, String signer, HashAlg hash, char[] password, boolean overwrite)
+            throws ActionFailure {
         try {
             if (file.isBlank() || key.isBlank()) {
                 throw new ActionFailure(t("failure.choose.sign"));
@@ -97,9 +116,18 @@ final class GuiActions {
             }
             Path input = path(file);
             Path output = path(file + ".sig");
-            RSAPrivateCrtKey privateKey = privateKeys.read(path(key), password);
+            // The signature path derives from the file name, so it could be the key itself
+            Path keyFile = path(key);
+            if (overwrite && Files.exists(output) && Files.exists(keyFile) && Files.isSameFile(output, keyFile)) {
+                throw new ActionFailure(t("failure.signature.is.key"));
+            }
+            RSAPrivateCrtKey privateKey = privateKeys.read(keyFile, password);
             SigFile sig = SigningService.sign(input, privateKey, hash, signer.strip(), SigningService.timestamp(clock));
-            AtomicFileWriter.writePublic(output, sig.toJson());
+            if (overwrite) {
+                AtomicFileWriter.replacePublic(output, sig.toJson());
+            } else {
+                AtomicFileWriter.writePublic(output, sig.toJson());
+            }
             return new Signature(output, sig.header().keyFingerprint());
         } catch (WrongPasswordException e) {
             throw new ActionFailure(t("failure.password.wrong"));

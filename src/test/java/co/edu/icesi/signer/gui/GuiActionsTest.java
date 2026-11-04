@@ -2,6 +2,7 @@ package co.edu.icesi.signer.gui;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -185,6 +186,53 @@ class GuiActionsTest {
                 file.toString(), keys.privateKey().toString(), "Ana", HashAlg.SHA_256, password()));
 
         assertEquals("original", Files.readString(dir.resolve("contract.txt.sig")));
+    }
+
+    @Test
+    void agreedOverwriteReplacesTheSignatureWithAWorkingOne() throws Exception {
+        GeneratedKeys keys = generate("ana");
+        Path file = Files.writeString(dir.resolve("contract.txt"), "content");
+        Path sig = Files.writeString(dir.resolve("contract.txt.sig"), "old");
+        assertTrue(actions.signatureExists(file.toString()));
+
+        actions.sign(file.toString(), keys.privateKey().toString(), "Ana", HashAlg.SHA_256, password(), true);
+
+        assertEquals(VerificationResult.VALID, actions.verify(
+                file.toString(), sig.toString(), keys.publicKey().toString()).result());
+    }
+
+    @Test
+    void signatureExistsIsFalseWithoutOne() throws Exception {
+        Path file = Files.writeString(dir.resolve("contract.txt"), "content");
+
+        assertFalse(actions.signatureExists(file.toString()));
+        assertFalse(actions.signatureExists(" "));
+    }
+
+    // Signing "ana" with the key "ana.sig" would otherwise destroy the key
+    @Test
+    void overwriteNeverDestroysThePrivateKey() throws Exception {
+        GeneratedKeys keys = generate("ana");
+        Path file = Files.writeString(dir.resolve("doc"), "content");
+        Path key = Files.move(keys.privateKey(), dir.resolve("doc.sig"));
+        byte[] before = Files.readAllBytes(key);
+
+        assertFails("private key", () -> actions.sign(
+                file.toString(), key.toString(), "Ana", HashAlg.SHA_256, password(), true));
+
+        assertArrayEquals(before, Files.readAllBytes(key));
+    }
+
+    @Test
+    void failedSigningKeepsTheOldSignature() throws Exception {
+        GeneratedKeys keys = generate("ana");
+        Path file = Files.writeString(dir.resolve("contract.txt"), "content");
+        Path sig = Files.writeString(dir.resolve("contract.txt.sig"), "old");
+
+        assertFails("Wrong password", () -> actions.sign(file.toString(), keys.privateKey().toString(), "Ana",
+                HashAlg.SHA_256, "not the right password".toCharArray(), true));
+
+        assertEquals("old", Files.readString(sig));
     }
 
     @Test
