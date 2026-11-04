@@ -723,7 +723,7 @@ Key distinction for the whole presentation: **"no practical method is known" ≠
 
 ## m) Distribution
 
-The program is delivered as native executables for Windows and Linux, produced by the `Release` workflow on every `v*` tag.
+The program is delivered as native executables for Windows and Linux, produced by the `Release` workflow whenever `develop` is merged into `main`. The version comes from the Conventional Commits since the last release (`scripts/next-version.sh`); commits that do not change the program publish nothing.
 
 - **Tooling:** `jdeps` (detects the required JDK modules) → `jlink` (minimal runtime) → `jpackage --type app-image` (executable with a bundled runtime; no Java install needed).
 
