@@ -65,12 +65,17 @@ the commits since the last release:
 
 The first release is `v0.1.0`.
 
+Every push to `develop` that changes the program also publishes a beta of the version it
+leads to, such as `v0.3.0-beta.1`. Betas are marked as prereleases and never become the latest
+release. Because Windows installers only accept
+numbers, all betas of a version install as `0.3.0`: uninstall one before installing the next.
+
 Use **Create a merge commit** for `develop` into `main`. A squash merge would hide the
 individual commits behind the PR title, and a title like `chore: merge develop into main`
 publishes nothing.
 
-Running the **Release** workflow manually builds the executables as downloadable
-artifacts without publishing anything.
+Running the **Release** workflow manually builds the executables and the installer as
+downloadable artifacts without publishing anything.
 
 ## Language
 
