@@ -144,6 +144,7 @@ Base package: `co.edu.icesi.signer`.
 | `keystore` | `WrongPasswordException`    | Wrong password → controlled message, never a stack trace.                                              |
 | `io`       | `AtomicFileWriter`          | Atomic write (temp file + `ATOMIC_MOVE`), 600 permissions.                                             |
 | `io`       | `FileHasher`                | Streaming hash of an `InputStream`.                                                                    |
+| `gui`      | `GuiMain`, `AppShell`, views | Swing interface for the three operations. `GuiActions` holds the logic, free of Swing, so it is tested without a display. |
 | `io`       | `SafeFileReader`            | Reads only regular files, with a size limit, so a FIFO or huge file cannot hang the program.           |
 | `core`     | `VerificationResult` (enum) | `VALID(0)`, `INVALID(1)`, `ERROR(2)`.                                                                  |
 | `core`     | `VerificationOutcome`       | A `VerificationResult` plus its explanation and the key fingerprint.                                   |
@@ -738,6 +739,8 @@ The program is delivered as native executables for Windows and Linux, produced b
   - `ATOMIC_MOVE` can fail with `AccessDeniedException` if another process holds the target open; that maps to ERROR.
   - Console output is forced to UTF-8 (`-Dstdout.encoding=UTF-8`).
   - The file system is case-insensitive: whether a case-only rename counts as a name mismatch must be decided and documented.
+
+- **Graphical interface:** a second launcher, `rsa-pss-signer-gui`, opens the Swing interface (FlatLaf, bundled Plus Jakarta Sans). It sets `win-console=false`, so no console window appears on Windows, and it reads passwords from `JPasswordField`, which needs no console.
 
 - **Integrity of the release:** each archive is published with its SHA-256 checksum. Unsigned Windows executables trigger a SmartScreen warning — the same trust problem this project is about.
 

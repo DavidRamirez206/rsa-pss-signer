@@ -1,0 +1,121 @@
+package co.edu.icesi.signer.gui;
+
+import co.edu.icesi.signer.cli.Cli;
+import co.edu.icesi.signer.crypto.KeyPairService;
+import co.edu.icesi.signer.gui.ResultCard.Tone;
+import co.edu.icesi.signer.gui.Widgets.PrimaryButton;
+import co.edu.icesi.signer.gui.Widgets.SegmentButton;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.util.ArrayList;
+import java.util.List;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+
+/** Generates a key pair into two files. */
+final class KeygenView extends View {
+    private static final long serialVersionUID = 1L;
+
+    final FilePicker base = new FilePicker("Folder and base name, such as /home/ana/ana", true);
+    final JPasswordField password = passwordField();
+    final JPasswordField confirmation = passwordField();
+
+    private final List<SegmentButton> sizes = new ArrayList<>();
+    private final JLabel hint = Widgets.label(" ", Theme.regular(12.5f), Theme.FAINT);
+    private final PrimaryButton generate = new PrimaryButton("Generate key pair");
+
+    KeygenView(GuiActions actions) {
+        super(actions, "Generate keys", "Create an RSA key pair. The private key stays encrypted with your password.");
+
+        row(Widgets.field("Save as", base));
+        row(Widgets.field("Key size", sizeSelector()));
+
+        JPanel passwords = new JPanel(new GridLayout(1, 2, 14, 0));
+        passwords.setOpaque(false);
+        passwords.add(Widgets.field("Password", password));
+        passwords.add(Widgets.field("Repeat password", confirmation));
+        passwords.setMaximumSize(new Dimension(Integer.MAX_VALUE, passwords.getPreferredSize().height));
+        row(passwords);
+        row(hint);
+        row(generate);
+
+        DocumentListener refresh = new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                refreshHint();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                refreshHint();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                refreshHint();
+            }
+        };
+        password.getDocument().addDocumentListener(refresh);
+        confirmation.getDocument().addDocumentListener(refresh);
+        refreshHint();
+
+        generate.addActionListener(event -> submit());
+    }
+
+    private JPanel sizeSelector() {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        row.setOpaque(false);
+        for (int bits : List.of(2048, 3072, 4096)) {
+            SegmentButton button = new SegmentButton(bits + " bits");
+            button.putClientProperty("bits", bits);
+            button.select(bits == KeyPairService.DEFAULT_KEY_SIZE);
+            button.addActionListener(event -> sizes.forEach(other -> other.select(other == button)));
+            sizes.add(button);
+            row.add(button);
+            row.add(javax.swing.Box.createHorizontalStrut(8));
+        }
+        return row;
+    }
+
+    private int selectedBits() {
+        return sizes.stream().filter(SegmentButton::isChosen)
+                .map(button -> (Integer) button.getClientProperty("bits"))
+                .findFirst().orElse(KeyPairService.DEFAULT_KEY_SIZE);
+    }
+
+    private void refreshHint() {
+        int length = password.getDocument().getLength();
+        int repeated = confirmation.getDocument().getLength();
+        if (length < Cli.MIN_PASSWORD_LENGTH) {
+            hint.setText(length + " of at least " + Cli.MIN_PASSWORD_LENGTH + " characters. The real protection of the key is this password.");
+            hint.setForeground(Theme.FAINT);
+        } else if (repeated == 0) {
+            hint.setText("Long enough. Now repeat it.");
+            hint.setForeground(Theme.MUTED);
+        } else {
+            boolean same = java.util.Arrays.equals(password.getPassword(), confirmation.getPassword());
+            hint.setText(same ? "The passwords match." : "The passwords do not match yet.");
+            hint.setForeground(same ? Theme.SUCCESS : Theme.WARNING);
+        }
+    }
+
+    private void submit() {
+        char[] first = password.getPassword();
+        char[] second = confirmation.getPassword();
+        int bits = selectedBits();
+        String target = base.value();
+        password.setText("");
+        confirmation.setText("");
+        run(generate, () -> actions.generateKeys(target, bits, first, second), keys -> result.show(
+                Tone.SUCCESS,
+                "Key pair generated",
+                List.of("Private key: " + keys.privateKey(), "Public key: " + keys.publicKey()),
+                keys.fingerprint(),
+                "Share the public key freely, and this fingerprint through a separate channel, such as"
+                        + " in person or by phone. That is how others know the key is really yours."));
+    }
+}

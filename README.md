@@ -35,6 +35,7 @@ co.edu.icesi.signer
 ├── cli       Main, Cli (run(args) -> exit code), PasswordProvider
 ├── core      VerificationResult
 ├── crypto    KeyPairService, SigningService, VerificationService, HashAlg, PssParams
+├── gui       GuiMain, AppShell, the three views, GuiActions, Theme
 ├── format    SigFile, CanonicalHeader, SigValidationException
 ├── keystore  PrivateKeyStore, PublicKeyStore, WrongPasswordException
 └── io        AtomicFileWriter, FileHasher, SafeFileReader
@@ -56,6 +57,14 @@ Passwords are read from the console without echo and are never command-line argu
 run the program from a real terminal rather than an IDE.
 
 From a source build, run `java -jar target/rsa-pss-signer.jar ...` after `mvn package`.
+
+### Graphical interface
+
+`rsa-pss-signer-gui` offers the same three operations in a window, on the same services and
+with the same checks. The password field never shows what is typed, and files can be dropped
+onto the path fields.
+
+From a source build: `java -cp target/rsa-pss-signer.jar co.edu.icesi.signer.gui.GuiMain`.
 
 ## Requirements
 
@@ -84,6 +93,11 @@ Each archive is published with its `.sha256` checksum.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch flow, commit conventions and the English-only rule.
+
+## Third-party assets
+
+The interface bundles the [Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans) font under the
+[SIL Open Font License](src/main/resources/fonts/OFL.txt), and uses [FlatLaf](https://www.formdev.com/flatlaf/) (Apache 2.0).
 
 ## License
 

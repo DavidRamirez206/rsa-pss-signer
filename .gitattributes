@@ -9,3 +9,6 @@
 src/test/resources/** -text -diff
 *.sig -text -diff
 *.bin -text -diff
+
+# Fonts bundled with the graphical interface
+*.ttf binary
