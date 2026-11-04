@@ -19,7 +19,7 @@ class SigFileTest {
               "version": 1,
               "hashAlg": "SHA-256",
               "pss": { "saltLen": 32, "mgf": "MGF1", "mgfHash": "SHA-256", "trailer": 1 },
-              "keyFingerprint": "3A:7F:0C",
+              "keyFingerprint": "3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91",
               "fileName": "contract.pdf",
               "signerName": "Ana Perez",
               "signedAt": "2026-10-28T11:30:00-05:00",
@@ -45,7 +45,7 @@ class SigFileTest {
         assertEquals("MGF1", sig.header().mgf());
         assertEquals("SHA-256", sig.header().mgfHash());
         assertEquals(1, sig.header().trailer());
-        assertEquals("3A:7F:0C", sig.header().keyFingerprint());
+        assertEquals("3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91", sig.header().keyFingerprint());
         assertEquals("contract.pdf", sig.header().fileName());
         assertEquals("Ana Perez", sig.header().signerName());
         assertEquals("2026-10-28T11:30:00-05:00", sig.header().signedAt());
@@ -56,7 +56,7 @@ class SigFileTest {
     @EnumSource(HashAlg.class)
     void jsonRoundTripPreservesEverything(HashAlg alg) throws Exception {
         CanonicalHeader header = CanonicalHeader.forSigning(
-                alg, "AB:CD", "Müller report.txt", "Zoë \"Quote\" Müller", "2026-10-28T11:30:00Z");
+                alg, "3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91", "Müller report.txt", "Zoë \"Quote\" Müller", "2026-10-28T11:30:00Z");
         SigFile original = new SigFile(header, new byte[] {0, -1, 127, -128});
 
         SigFile parsed = SigFile.parse(original.toJson());
@@ -70,7 +70,7 @@ class SigFileTest {
     void canonicalBytesDoNotDependOnJsonLayout() throws Exception {
         String reordered = """
                 {"signature":"AQID","signedAt":"2026-10-28T11:30:00-05:00","signerName":"Ana Perez",
-                "fileName":"contract.pdf","keyFingerprint":"3A:7F:0C",
+                "fileName":"contract.pdf","keyFingerprint":"3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91",
                 "pss":{"trailer":1,"mgfHash":"SHA-256","mgf":"MGF1","saltLen":32},
                 "hashAlg":"SHA-256","version":1}
                 """;
@@ -81,7 +81,7 @@ class SigFileTest {
     @Test
     void toJsonWritesTheDocumentedFieldNames() {
         String json = new String(new SigFile(
-                CanonicalHeader.forSigning(HashAlg.SHA_256, "AB", "a.txt", "Ana", "2026-10-28T11:30:00Z"),
+                CanonicalHeader.forSigning(HashAlg.SHA_256, "3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91", "a.txt", "Ana", "2026-10-28T11:30:00Z"),
                 new byte[] {1}).toJson(), StandardCharsets.UTF_8);
 
         for (String field : new String[] {"version", "hashAlg", "pss", "saltLen", "mgf", "mgfHash", "trailer",
@@ -116,7 +116,7 @@ class SigFileTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-        "\"version\": 1,", "\"hashAlg\": \"SHA-256\",", "\"keyFingerprint\": \"3A:7F:0C\",",
+        "\"version\": 1,", "\"hashAlg\": \"SHA-256\",", "\"keyFingerprint\": \"3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91:3A:7F:0C:91\",",
         "\"fileName\": \"contract.pdf\",", "\"signerName\": \"Ana Perez\",",
         "\"signedAt\": \"2026-10-28T11:30:00-05:00\",", "\"saltLen\": 32,", "\"mgf\": \"MGF1\",",
         "\"mgfHash\": \"SHA-256\","

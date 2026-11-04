@@ -2,11 +2,11 @@ package co.edu.icesi.signer.keystore;
 
 import co.edu.icesi.signer.crypto.KeyPairService;
 import co.edu.icesi.signer.io.AtomicFileWriter;
+import co.edu.icesi.signer.io.SafeFileReader;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
@@ -22,6 +22,9 @@ import org.bouncycastle.util.io.pem.PemWriter;
 public final class PublicKeyStore {
 
     private static final String PEM_TYPE = "PUBLIC KEY";
+
+    /** Far above any allowed key: a 4096-bit public key takes under 1 KB of PEM. */
+    private static final long MAX_FILE_SIZE = 64 * 1024;
 
     private PublicKeyStore() {
     }
@@ -43,7 +46,7 @@ public final class PublicKeyStore {
      */
     public static RSAPublicKey read(Path file) throws IOException, InvalidKeyException {
         // Latin-1 never fails on binary input: such a file simply contains no PEM object
-        String content = Files.readString(file, StandardCharsets.ISO_8859_1);
+        String content = new String(SafeFileReader.read(file, MAX_FILE_SIZE), StandardCharsets.ISO_8859_1);
         PemObject pem;
         try (PemReader reader = new PemReader(new StringReader(content))) {
             pem = reader.readPemObject();
