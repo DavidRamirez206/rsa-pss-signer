@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.Signature;
 import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.interfaces.RSAPublicKey;
 
 /** Signs files with RSASSA-PSS over the canonical header and the file digest. */
 public final class SigningService {
@@ -20,13 +21,16 @@ public final class SigningService {
      *
      * @param signedAt ISO-8601 date declared by the signer; it is signed, but it is not trusted time
      * @throws IllegalArgumentException if a text field contains control characters
+     * @throws java.security.InvalidKeyException if the key is outside the allowlists
      */
     public static SigFile sign(
             Path file, RSAPrivateCrtKey privateKey, HashAlg hashAlg, String signerName, String signedAt)
             throws IOException, GeneralSecurityException {
+        RSAPublicKey publicKey = KeyPairService.publicKeyOf(privateKey);
+        KeyPairService.requireAllowed(publicKey);
         CanonicalHeader header = CanonicalHeader.forSigning(
                 hashAlg,
-                KeyPairService.fingerprint(KeyPairService.publicKeyOf(privateKey)),
+                KeyPairService.fingerprint(publicKey),
                 file.getFileName().toString(),
                 signerName,
                 signedAt);

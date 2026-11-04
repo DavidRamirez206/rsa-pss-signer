@@ -6,6 +6,7 @@ import co.edu.icesi.signer.crypto.PssParams;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,8 +19,14 @@ import java.security.Provider;
 import java.security.Signature;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Set;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.nist.NISTObjectIdentifiers;
+import org.bouncycastle.asn1.pkcs.PBES2Parameters;
+import org.bouncycastle.asn1.pkcs.PBKDF2Params;
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
+import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.crypto.util.PBKDF2Config;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.OperatorCreationException;
@@ -45,11 +52,25 @@ public final class PrivateKeyStore {
     /** Production PBKDF2 iteration count (OWASP recommendation for HMAC-SHA256). */
     public static final int DEFAULT_ITERATIONS = 600_000;
 
+    /** Accepted when reading: below this a key is too cheap to attack. */
+    static final int MIN_ITERATIONS = 100_000;
+
+    /** Accepted when reading: above this a crafted key could hang the program. */
+    static final int MAX_ITERATIONS = 10_000_000;
+
     static final int SALT_LENGTH = 16;
 
     private static final String PEM_TYPE = "ENCRYPTED PRIVATE KEY";
     private static final Provider BOUNCY_CASTLE = new BouncyCastleProvider();
     private static final byte[] CONSISTENCY_PROBE = {0x70, 0x72, 0x6f, 0x62, 0x65};
+    private static final Set<ASN1ObjectIdentifier> ALLOWED_PRFS = Set.of(
+            PKCSObjectIdentifiers.id_hmacWithSHA256,
+            PKCSObjectIdentifiers.id_hmacWithSHA384,
+            PKCSObjectIdentifiers.id_hmacWithSHA512);
+    private static final Set<ASN1ObjectIdentifier> ALLOWED_CIPHERS = Set.of(
+            NISTObjectIdentifiers.id_aes128_CBC,
+            NISTObjectIdentifiers.id_aes192_CBC,
+            NISTObjectIdentifiers.id_aes256_CBC);
 
     private final int iterations;
 
@@ -57,7 +78,10 @@ public final class PrivateKeyStore {
         this(DEFAULT_ITERATIONS);
     }
 
-    /** Lower iteration counts are for tests and the brute-force demo only. */
+    /**
+     * Lower iteration counts are for tests and the brute-force demo only. Such a store
+     * also reads keys down to that count, while the default store rejects them.
+     */
     public PrivateKeyStore(int iterations) {
         this.iterations = iterations;
     }
@@ -94,12 +118,14 @@ public final class PrivateKeyStore {
      * and verifying it with the derived public key.
      *
      * @throws WrongPasswordException if the password does not open the key
-     * @throws InvalidKeyException if the file is not an encrypted PEM private key,
-     *     or holds a key that is not RSA
+     * @throws InvalidKeyException if the file is not an encrypted PEM private key, its
+     *     encryption parameters are not acceptable, or it holds a key that is not RSA
+     *     or is outside the allowlists for size and exponent
      */
     public RSAPrivateCrtKey read(Path file, char[] password)
             throws IOException, InvalidKeyException, WrongPasswordException {
         PKCS8EncryptedPrivateKeyInfo encrypted = readEncrypted(file);
+        requireSafeEncryption(encrypted, file);
 
         byte[] decrypted;
         try {
@@ -125,8 +151,55 @@ public final class PrivateKeyStore {
             throw new InvalidKeyException(file.getFileName() + " does not hold an RSA private key", e);
         }
 
+        requireAllowedKey(privateKey);
         requireConsistent(privateKey);
         return privateKey;
+    }
+
+    /**
+     * Checks the file's parameters before anything is derived from the password: they
+     * come from the file, so a crafted iteration count could otherwise hang the program.
+     */
+    private void requireSafeEncryption(PKCS8EncryptedPrivateKeyInfo encrypted, Path file) throws InvalidKeyException {
+        PBKDF2Params kdf;
+        ASN1ObjectIdentifier cipher;
+        try {
+            AlgorithmIdentifier scheme = encrypted.toASN1Structure().getEncryptionAlgorithm();
+            if (!PKCSObjectIdentifiers.id_PBES2.equals(scheme.getAlgorithm())) {
+                throw new InvalidKeyException(file.getFileName() + " is not encrypted with PBES2");
+            }
+            PBES2Parameters pbes2 = PBES2Parameters.getInstance(scheme.getParameters());
+            if (!PKCSObjectIdentifiers.id_PBKDF2.equals(pbes2.getKeyDerivationFunc().getAlgorithm())) {
+                throw new InvalidKeyException(file.getFileName() + " does not use PBKDF2");
+            }
+            kdf = PBKDF2Params.getInstance(pbes2.getKeyDerivationFunc().getParameters());
+            cipher = pbes2.getEncryptionScheme().getAlgorithm();
+        } catch (IllegalArgumentException e) {
+            throw new InvalidKeyException("Malformed encryption parameters in " + file.getFileName(), e);
+        }
+
+        BigInteger count = kdf.getIterationCount();
+        int minimum = Math.min(iterations, MIN_ITERATIONS);
+        if (count.compareTo(BigInteger.valueOf(minimum)) < 0
+                || count.compareTo(BigInteger.valueOf(MAX_ITERATIONS)) > 0) {
+            throw new InvalidKeyException("Iteration count not allowed in " + file.getFileName() + ": " + count);
+        }
+        if (!ALLOWED_PRFS.contains(kdf.getPrf().getAlgorithm())) {
+            throw new InvalidKeyException("PBKDF2 hash not allowed in " + file.getFileName());
+        }
+        if (!ALLOWED_CIPHERS.contains(cipher)) {
+            throw new InvalidKeyException("Cipher not allowed in " + file.getFileName());
+        }
+    }
+
+    private static void requireAllowedKey(RSAPrivateCrtKey privateKey) throws InvalidKeyException {
+        try {
+            KeyPairService.requireAllowed(KeyPairService.publicKeyOf(privateKey));
+        } catch (InvalidKeyException e) {
+            throw e;
+        } catch (GeneralSecurityException e) {
+            throw new InvalidKeyException("The private key is internally inconsistent", e);
+        }
     }
 
     private static PKCS8EncryptedPrivateKeyInfo readEncrypted(Path file) throws IOException, InvalidKeyException {

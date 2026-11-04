@@ -48,6 +48,11 @@ public final class VerificationService {
         String fingerprint = KeyPairService.fingerprint(publicKey);
         CanonicalHeader header = sig.header();
 
+        try {
+            KeyPairService.requireAllowed(publicKey);
+        } catch (InvalidKeyException e) {
+            return error("The public key cannot be used: " + e.getMessage(), fingerprint);
+        }
         if (!fingerprint.equals(header.keyFingerprint())) {
             return error("This signature was made with key " + header.keyFingerprint()
                     + ", not with the key supplied", fingerprint);
