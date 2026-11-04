@@ -4,12 +4,12 @@ import co.edu.icesi.signer.crypto.HashAlg;
 import co.edu.icesi.signer.crypto.KeyPairService;
 import co.edu.icesi.signer.crypto.PssParams;
 import co.edu.icesi.signer.io.AtomicFileWriter;
+import co.edu.icesi.signer.io.SafeFileReader;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
@@ -59,6 +59,9 @@ public final class PrivateKeyStore {
     static final int MAX_ITERATIONS = 10_000_000;
 
     static final int SALT_LENGTH = 16;
+
+    /** Far above any allowed key: a 4096-bit private key takes about 4 KB of PEM. */
+    private static final long MAX_FILE_SIZE = 64 * 1024;
 
     private static final String PEM_TYPE = "ENCRYPTED PRIVATE KEY";
     private static final Provider BOUNCY_CASTLE = new BouncyCastleProvider();
@@ -204,7 +207,7 @@ public final class PrivateKeyStore {
 
     private static PKCS8EncryptedPrivateKeyInfo readEncrypted(Path file) throws IOException, InvalidKeyException {
         // Latin-1 never fails on binary input: such a file simply contains no PEM object
-        String content = Files.readString(file, StandardCharsets.ISO_8859_1);
+        String content = new String(SafeFileReader.read(file, MAX_FILE_SIZE), StandardCharsets.ISO_8859_1);
         try (PemReader reader = new PemReader(new StringReader(content))) {
             PemObject pem = reader.readPemObject();
             if (pem == null || !PEM_TYPE.equals(pem.getType())) {

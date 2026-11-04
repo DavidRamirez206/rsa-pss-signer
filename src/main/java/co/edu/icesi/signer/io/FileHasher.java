@@ -20,8 +20,13 @@ public final class FileHasher {
     private FileHasher() {
     }
 
-    /** Hashes the whole file. */
+    /**
+     * Hashes the whole file.
+     *
+     * @throws IOException if it cannot be read or is not a regular file
+     */
     public static byte[] hash(Path file, MessageDigest digest) throws IOException {
+        SafeFileReader.requireRegularFile(file);
         try (InputStream in = Files.newInputStream(file)) {
             return hash(in, digest);
         }

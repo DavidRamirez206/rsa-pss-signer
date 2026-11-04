@@ -1,6 +1,7 @@
 package co.edu.icesi.signer.format;
 
 import co.edu.icesi.signer.crypto.HashAlg;
+import co.edu.icesi.signer.crypto.PssParams;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -10,6 +11,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * A {@code .sig} file: the signed {@link CanonicalHeader} plus the signature bytes,
@@ -20,6 +22,11 @@ import java.util.Set;
  * field would be metadata outside the signature.
  */
 public record SigFile(CanonicalHeader header, byte[] signature) {
+
+    /** Largest {@code .sig} accepted, checked before reading it. */
+    public static final long MAX_FILE_SIZE = 64 * 1024;
+
+    private static final Pattern FINGERPRINT = Pattern.compile("([0-9A-F]{2}:){31}[0-9A-F]{2}");
 
     private static final JsonMapper MAPPER = JsonMapper.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -92,9 +99,40 @@ public record SigFile(CanonicalHeader header, byte[] signature) {
                     text(root, "fileName"),
                     text(root, "signerName"),
                     text(root, "signedAt"));
+            requireExpectedValues(header);
             return new SigFile(header, signature);
         } catch (IllegalArgumentException e) {
             throw new SigValidationException(e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Checks values the format fixes completely. They are signed too, so a changed one
+     * would also end in INVALID, but it is a malformed file rather than a bad signature.
+     */
+    private static void requireExpectedValues(CanonicalHeader header) throws SigValidationException {
+        HashAlg hash = header.hashAlg();
+        if (header.version() != CanonicalHeader.CURRENT_VERSION) {
+            throw new SigValidationException("Signature format version not supported: " + header.version());
+        }
+        if (header.saltLen() != hash.digestLength()) {
+            throw new SigValidationException("Field pss.saltLen must be " + hash.digestLength() + " for " + hash.jcaName());
+        }
+        if (!PssParams.MGF.equals(header.mgf())) {
+            throw new SigValidationException("Field pss.mgf must be " + PssParams.MGF);
+        }
+        if (!hash.jcaName().equals(header.mgfHash())) {
+            throw new SigValidationException("Field pss.mgfHash must be " + hash.jcaName());
+        }
+        if (header.trailer() != PssParams.TRAILER_FIELD) {
+            throw new SigValidationException("Field pss.trailer must be " + PssParams.TRAILER_FIELD);
+        }
+        if (!FINGERPRINT.matcher(header.keyFingerprint()).matches()) {
+            throw new SigValidationException("Field keyFingerprint is not a SHA-256 fingerprint");
+        }
+        String fileName = header.fileName();
+        if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\")) {
+            throw new SigValidationException("Field fileName must be a base name, without any path");
         }
     }
 
