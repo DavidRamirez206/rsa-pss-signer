@@ -37,7 +37,7 @@ co.edu.icesi.signer
 ├── crypto    KeyPairService, SigningService, VerificationService, HashAlg, PssParams
 ├── format    SigFile, CanonicalHeader, SigValidationException
 ├── keystore  PrivateKeyStore, PublicKeyStore, WrongPasswordException
-└── io        AtomicFileWriter, FileHasher
+└── io        AtomicFileWriter, FileHasher, SafeFileReader
 ```
 
 ## Usage
