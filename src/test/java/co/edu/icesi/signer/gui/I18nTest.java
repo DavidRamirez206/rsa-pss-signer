@@ -2,7 +2,6 @@ package co.edu.icesi.signer.gui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.icesi.signer.core.VerificationOutcome;
 import co.edu.icesi.signer.core.VerificationResult;
@@ -66,14 +65,14 @@ class I18nTest {
 
     @Test
     void spanishAccentsAreReadAsUtf8() {
-        assertTrue(SPANISH.getString("common.password").equals("Contraseña"), SPANISH.getString("common.password"));
+        assertEquals("Contrase\u00f1a", SPANISH.getString("common.password"));
     }
 
     @Test
     void textFollowsTheLanguageInUse() {
         I18n.use(Language.SPANISH);
         assertEquals("Omitir", I18n.t("guide.skip"));
-        assertEquals("Página 2 de 5", I18n.t("guide.page", 2, 5));
+        assertEquals("P\u00e1gina 2 de 5", I18n.t("guide.page", 2, 5));
 
         I18n.use(Language.ENGLISH);
         assertEquals("Skip", I18n.t("guide.skip"));

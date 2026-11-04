@@ -18,6 +18,8 @@ import java.time.ZoneOffset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class GuiActionsTest {
 
@@ -72,6 +74,38 @@ class GuiActionsTest {
         GuiActions.Signature signature = actions.sign(
                 file.toString(), keys.privateKey().toString(), "Ana Perez", HashAlg.SHA_256, password());
         Files.writeString(file, "changed");
+
+        assertEquals(VerificationResult.INVALID, actions.verify(
+                file.toString(), signature.file().toString(), keys.publicKey().toString()).result());
+    }
+
+    // Only the bytes count: undoing a change exactly makes the signature valid again
+    @Test
+    void undoingAChangeExactlyIsValidAgain() throws Exception {
+        GeneratedKeys keys = generate("ana");
+        Path file = Files.writeString(dir.resolve("contract.txt"), "content");
+        GuiActions.Signature signature = actions.sign(
+                file.toString(), keys.privateKey().toString(), "Ana Perez", HashAlg.SHA_256, password());
+        String sig = signature.file().toString();
+        String pub = keys.publicKey().toString();
+
+        Files.writeString(file, "contents");
+        assertEquals(VerificationResult.INVALID, actions.verify(file.toString(), sig, pub).result());
+
+        Files.writeString(file, "content");
+        assertEquals(VerificationResult.VALID, actions.verify(file.toString(), sig, pub).result());
+    }
+
+    // What an editor may do on save, without showing it
+    @ParameterizedTest
+    @ValueSource(strings = {"content\n", "content\r\n", "\uFEFFcontent"})
+    void invisibleChangesAreChangesToo(String saved) throws Exception {
+        GeneratedKeys keys = generate("ana");
+        Path file = Files.writeString(dir.resolve("contract.txt"), "content");
+        GuiActions.Signature signature = actions.sign(
+                file.toString(), keys.privateKey().toString(), "Ana Perez", HashAlg.SHA_256, password());
+
+        Files.writeString(file, saved);
 
         assertEquals(VerificationResult.INVALID, actions.verify(
                 file.toString(), signature.file().toString(), keys.publicKey().toString()).result());

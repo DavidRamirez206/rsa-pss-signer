@@ -192,7 +192,7 @@ class UserGuideTest {
 
             assertEquals(Language.SPANISH, state.language);
             assertEquals(Language.SPANISH, I18n.current());
-            assertEquals("Manual de usuario", root.shell.guideButton.getText());
+            assertEquals(I18n.load(Language.SPANISH).getString("nav.guide"), root.shell.guideButton.getText());
             assertTrue(root.shell.sign.isVisible());
             assertEquals("contract.pdf", root.shell.sign.file.value());
             assertEquals("Ana Perez", root.shell.sign.signer.getText());
@@ -211,6 +211,8 @@ class UserGuideTest {
             root.guide.languageSwitch.spanish.doClick();
 
             assertTrue(root.isGuideShown());
+            assertTrue(root.guide.isVisible());
+            assertFalse(root.shell.isVisible());
             assertEquals(1, root.guide.currentPage());
             assertEquals("Omitir", root.guide.skip.getText());
             assertFalse(state.seen, "Changing language is not the same as skipping");
@@ -225,7 +227,7 @@ class UserGuideTest {
 
             AppRoot root = root(state);
 
-            assertEquals("Manual de usuario", root.shell.guideButton.getText());
+            assertEquals(I18n.load(Language.SPANISH).getString("nav.guide"), root.shell.guideButton.getText());
         });
     }
 }
