@@ -110,7 +110,7 @@ public final class PrivateKeyStore {
                             .setProvider(BOUNCY_CASTLE)
                             .build(password))
                     .getEncoded();
-        } catch (PKCSException | IOException | IllegalArgumentException e) {
+        } catch (PKCSException | IOException e) {
             throw new WrongPasswordException();
         }
 
