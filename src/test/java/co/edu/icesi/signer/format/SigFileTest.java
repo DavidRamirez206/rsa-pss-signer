@@ -56,7 +56,7 @@ class SigFileTest {
     @EnumSource(HashAlg.class)
     void jsonRoundTripPreservesEverything(HashAlg alg) throws Exception {
         CanonicalHeader header = CanonicalHeader.forSigning(
-                alg, "AB:CD", "contrato año.txt", "Ana \"Quote\" Ñandú", "2026-10-28T11:30:00Z");
+                alg, "AB:CD", "Müller report.txt", "Zoë \"Quote\" Müller", "2026-10-28T11:30:00Z");
         SigFile original = new SigFile(header, new byte[] {0, -1, 127, -128});
 
         SigFile parsed = SigFile.parse(original.toJson());

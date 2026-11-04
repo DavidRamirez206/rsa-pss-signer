@@ -55,7 +55,7 @@ class CanonicalHeaderTest {
 
     @Test
     void bytesAreUtf8() {
-        CanonicalHeader header = header("contract.txt", "Ana Ñandú");
+        CanonicalHeader header = header("contract.txt", "Zoë Müller");
 
         assertArrayEquals(header.toCanonicalString().getBytes(StandardCharsets.UTF_8), header.toBytes());
     }
