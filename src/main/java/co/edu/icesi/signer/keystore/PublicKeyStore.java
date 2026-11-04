@@ -1,13 +1,13 @@
 package co.edu.icesi.signer.keystore;
 
 import co.edu.icesi.signer.crypto.KeyPairService;
+import co.edu.icesi.signer.io.AtomicFileWriter;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
@@ -32,7 +32,7 @@ public final class PublicKeyStore {
         try (PemWriter writer = new PemWriter(pem)) {
             writer.writeObject(new PemObject(PEM_TYPE, publicKey.getEncoded()));
         }
-        Files.writeString(file, pem.toString(), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+        AtomicFileWriter.writePublic(file, pem.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     /**

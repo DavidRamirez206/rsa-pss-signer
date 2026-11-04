@@ -14,6 +14,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Clock;
 import java.time.Instant;
@@ -25,6 +26,8 @@ import java.util.Deque;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -328,5 +331,41 @@ class CliTest {
         assertFalse(out().contains(PASSWORD));
         assertFalse(err().contains(PASSWORD));
         assertFalse(err().contains("wrong password here"));
+    }
+
+    // T-1.6: through the real commands, not only the writer
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void keygenMakesThePrivateKeyOwnerOnly() throws Exception {
+        generateKeys("perms");
+
+        assertEquals("rw-------", PosixFilePermissions.toString(
+                Files.getPosixFilePermissions(dir.resolve("perms.key"))));
+    }
+
+    // T-5.7
+    @Test
+    void signingWithTheInputAsOutputIsAnErrorAndKeepsTheInput() throws Exception {
+        generateKeys("same");
+        byte[] before = Files.readAllBytes(contract);
+        typedPasswords.add(PASSWORD);
+
+        int exit = run("sign", contract.toString(), "--key", path("same.key"), "--signer", "Ana Perez",
+                "--out", contract.toString());
+
+        assertEquals(2, exit);
+        assertArrayEquals(before, Files.readAllBytes(contract));
+    }
+
+    @Test
+    void signingToAMissingDirectoryIsAnError() throws Exception {
+        generateKeys("nodir");
+        typedPasswords.add(PASSWORD);
+
+        int exit = run("sign", contract.toString(), "--key", path("nodir.key"), "--signer", "Ana Perez",
+                "--out", dir.resolve("missing").resolve("x.sig").toString());
+
+        assertEquals(2, exit);
+        assertTrue(err().contains("missing"), err());
     }
 }
