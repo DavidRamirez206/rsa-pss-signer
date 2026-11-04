@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -27,6 +28,11 @@ class GuiActionsTest {
 
     @TempDir
     Path dir;
+
+    @BeforeEach
+    void startInEnglish() {
+        I18n.use(I18n.Language.ENGLISH);
+    }
 
     private char[] password() {
         return PASSWORD.toCharArray();

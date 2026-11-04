@@ -1,5 +1,7 @@
 package co.edu.icesi.signer.gui;
 
+import static co.edu.icesi.signer.gui.I18n.t;
+
 import co.edu.icesi.signer.cli.Cli;
 import co.edu.icesi.signer.crypto.KeyPairService;
 import co.edu.icesi.signer.gui.ResultCard.Tone;
@@ -20,24 +22,24 @@ import javax.swing.event.DocumentListener;
 final class KeygenView extends View {
     private static final long serialVersionUID = 1L;
 
-    final FilePicker base = new FilePicker("Folder and base name, such as /home/ana/ana", true);
+    final FilePicker base = new FilePicker(t("keygen.base.placeholder"), true);
     final JPasswordField password = passwordField();
     final JPasswordField confirmation = passwordField();
 
     private final List<SegmentButton> sizes = new ArrayList<>();
     private final JLabel hint = Widgets.label(" ", Theme.regular(12.5f), Theme.FAINT);
-    private final PrimaryButton generate = new PrimaryButton("Generate key pair");
+    private final PrimaryButton generate = new PrimaryButton(t("keygen.submit"));
 
     KeygenView(GuiActions actions) {
-        super(actions, "Generate keys", "Create an RSA key pair. The private key stays encrypted with your password.");
+        super(actions, t("keygen.title"), t("keygen.subtitle"));
 
-        row(Widgets.field("Save as", base));
-        row(Widgets.field("Key size", sizeSelector()));
+        row(Widgets.field(t("keygen.base"), base));
+        row(Widgets.field(t("keygen.size"), sizeSelector()));
 
         JPanel passwords = new JPanel(new GridLayout(1, 2, 14, 0));
         passwords.setOpaque(false);
-        passwords.add(Widgets.field("Password", password));
-        passwords.add(Widgets.field("Repeat password", confirmation));
+        passwords.add(Widgets.field(t("common.password"), password));
+        passwords.add(Widgets.field(t("keygen.repeat"), confirmation));
         passwords.setMaximumSize(new Dimension(Integer.MAX_VALUE, passwords.getPreferredSize().height));
         row(passwords);
         row(hint);
@@ -70,7 +72,7 @@ final class KeygenView extends View {
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         row.setOpaque(false);
         for (int bits : List.of(2048, 3072, 4096)) {
-            SegmentButton button = new SegmentButton(bits + " bits");
+            SegmentButton button = new SegmentButton(t("keygen.bits", bits));
             button.putClientProperty("bits", bits);
             button.select(bits == KeyPairService.DEFAULT_KEY_SIZE);
             button.addActionListener(event -> sizes.forEach(other -> other.select(other == button)));
@@ -91,14 +93,14 @@ final class KeygenView extends View {
         int length = password.getDocument().getLength();
         int repeated = confirmation.getDocument().getLength();
         if (length < Cli.MIN_PASSWORD_LENGTH) {
-            hint.setText(length + " of at least " + Cli.MIN_PASSWORD_LENGTH + " characters. The real protection of the key is this password.");
+            hint.setText(t("keygen.hint.short", length, Cli.MIN_PASSWORD_LENGTH));
             hint.setForeground(Theme.FAINT);
         } else if (repeated == 0) {
-            hint.setText("Long enough. Now repeat it.");
+            hint.setText(t("keygen.hint.repeat"));
             hint.setForeground(Theme.MUTED);
         } else {
             boolean same = java.util.Arrays.equals(password.getPassword(), confirmation.getPassword());
-            hint.setText(same ? "The passwords match." : "The passwords do not match yet.");
+            hint.setText(t(same ? "keygen.hint.match" : "keygen.hint.mismatch"));
             hint.setForeground(same ? Theme.SUCCESS : Theme.WARNING);
         }
     }
@@ -112,10 +114,9 @@ final class KeygenView extends View {
         confirmation.setText("");
         run(generate, () -> actions.generateKeys(target, bits, first, second), keys -> result.show(
                 Tone.SUCCESS,
-                "Key pair generated",
-                List.of("Private key: " + keys.privateKey(), "Public key: " + keys.publicKey()),
+                t("keygen.done"),
+                List.of(t("keygen.done.private", keys.privateKey()), t("keygen.done.public", keys.publicKey())),
                 keys.fingerprint(),
-                "Share the public key freely, and this fingerprint through a separate channel, such as"
-                        + " in person or by phone. That is how others know the key is really yours."));
+                t("keygen.done.note")));
     }
 }

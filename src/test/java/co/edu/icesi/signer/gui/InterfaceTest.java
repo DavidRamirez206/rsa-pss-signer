@@ -17,6 +17,7 @@ import java.time.Clock;
 import javax.swing.JLabel;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -33,8 +34,13 @@ class InterfaceTest {
         SwingUtilities.invokeAndWait(Theme::install);
     }
 
+    @BeforeEach
+    void startInEnglish() {
+        I18n.use(I18n.Language.ENGLISH);
+    }
+
     private static AppShell shell() {
-        return new AppShell(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC()), () -> { });
+        return new AppShell(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC()), () -> { }, language -> { });
     }
 
     private static void layOut(Component component) {

@@ -1,5 +1,7 @@
 package co.edu.icesi.signer.gui;
 
+import static co.edu.icesi.signer.gui.I18n.t;
+
 import co.edu.icesi.signer.gui.Widgets.Card;
 import co.edu.icesi.signer.gui.Widgets.GhostButton;
 import java.awt.BorderLayout;
@@ -80,7 +82,7 @@ final class ResultCard extends Card {
         }
         if (fingerprint != null) {
             body.add(Box.createVerticalStrut(12));
-            body.add(Widgets.label("Key fingerprint (SHA-256)", Theme.medium(12f), Theme.MUTED));
+            body.add(Widgets.label(t("common.fingerprint"), Theme.medium(12f), Theme.MUTED));
             body.add(Box.createVerticalStrut(5));
             body.add(fingerprintRow(fingerprint));
         }
@@ -98,9 +100,9 @@ final class ResultCard extends Card {
         row.setOpaque(false);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.add(Widgets.wrapped(inTwoLines(fingerprint), Theme.fingerprint(12.5f), Theme.TEXT), BorderLayout.CENTER);
-        GhostButton copy = new GhostButton("Copy");
+        GhostButton copy = new GhostButton(t("common.copy"));
         copy.setIcon(Icons.copy(14, Theme.TEXT));
-        copy.setPreferredSize(new Dimension(88, 34));
+        copy.setPreferredSize(new Dimension(108, 34));
         copy.addActionListener(event -> Toolkit.getDefaultToolkit().getSystemClipboard()
                 .setContents(new StringSelection(fingerprint), null));
         JPanel holder = new JPanel(new BorderLayout());

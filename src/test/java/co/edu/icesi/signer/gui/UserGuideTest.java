@@ -4,31 +4,55 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import co.edu.icesi.signer.gui.I18n.Language;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Clock;
 import javax.swing.SwingUtilities;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class UserGuideTest {
 
-    private static final class MemoryState implements GuideState {
+    private static final class MemoryState implements Settings {
         boolean seen;
+        Language language = Language.ENGLISH;
 
         MemoryState(boolean seen) {
             this.seen = seen;
         }
 
         @Override
-        public boolean seen() {
+        public boolean guideSeen() {
             return seen;
         }
 
         @Override
-        public void markSeen() {
+        public void markGuideSeen() {
             seen = true;
         }
+
+        @Override
+        public Language language() {
+            return language;
+        }
+
+        @Override
+        public void language(Language language) {
+            this.language = language;
+        }
+    }
+
+    @BeforeEach
+    void startInEnglish() {
+        I18n.use(Language.ENGLISH);
+    }
+
+    @AfterEach
+    void backToEnglish() {
+        I18n.use(Language.ENGLISH);
     }
 
     @BeforeAll
@@ -36,7 +60,7 @@ class UserGuideTest {
         SwingUtilities.invokeAndWait(Theme::install);
     }
 
-    private static AppRoot root(GuideState state) {
+    private static AppRoot root(Settings state) {
         return new AppRoot(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC()), state);
     }
 
@@ -101,7 +125,7 @@ class UserGuideTest {
         onEdt(() -> {
             MemoryState state = new MemoryState(false);
             AppRoot root = root(state);
-            for (int i = 1; i < UserGuide.PAGES.size(); i++) {
+            for (int i = 1; i < UserGuide.pageCount(); i++) {
                 assertTrue(root.isGuideShown());
                 assertFalse(state.seen, "Not finished on page " + i);
                 root.guide.next.doClick();
@@ -151,6 +175,57 @@ class UserGuideTest {
             root(state);
 
             assertFalse(state.seen);
+        });
+    }
+
+    @Test
+    void languageIsAppliedAndSavedAndKeepsPageAndFields() throws Exception {
+        onEdt(() -> {
+            MemoryState state = new MemoryState(true);
+            AppRoot root = root(state);
+            root.shell.select("sign");
+            root.shell.sign.file.value("contract.pdf");
+            root.shell.sign.signer.setText("Ana Perez");
+            root.shell.sign.password.setText("not kept");
+
+            root.shell.languageSwitch.spanish.doClick();
+
+            assertEquals(Language.SPANISH, state.language);
+            assertEquals(Language.SPANISH, I18n.current());
+            assertEquals("Manual de usuario", root.shell.guideButton.getText());
+            assertTrue(root.shell.sign.isVisible());
+            assertEquals("contract.pdf", root.shell.sign.file.value());
+            assertEquals("Ana Perez", root.shell.sign.signer.getText());
+            assertEquals(0, root.shell.sign.password.getPassword().length);
+            assertFalse(root.isGuideShown());
+        });
+    }
+
+    @Test
+    void languageCanChangeInsideTheGuideWithoutLeavingItsPage() throws Exception {
+        onEdt(() -> {
+            MemoryState state = new MemoryState(false);
+            AppRoot root = root(state);
+            root.guide.next.doClick();
+
+            root.guide.languageSwitch.spanish.doClick();
+
+            assertTrue(root.isGuideShown());
+            assertEquals(1, root.guide.currentPage());
+            assertEquals("Omitir", root.guide.skip.getText());
+            assertFalse(state.seen, "Changing language is not the same as skipping");
+        });
+    }
+
+    @Test
+    void savedLanguageIsUsedOnStart() throws Exception {
+        onEdt(() -> {
+            MemoryState state = new MemoryState(true);
+            state.language = Language.SPANISH;
+
+            AppRoot root = root(state);
+
+            assertEquals("Manual de usuario", root.shell.guideButton.getText());
         });
     }
 }

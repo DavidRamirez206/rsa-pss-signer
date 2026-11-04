@@ -67,6 +67,9 @@ onto the path fields.
 The first time it opens, a short user guide walks through the three operations. It can be
 skipped, and reopened at any time from **User guide** in the sidebar.
 
+The interface is available in English and Spanish, from the **EN / ES** selector. It starts in
+Spanish on Spanish systems and remembers the choice. The command line stays in English.
+
 From a source build: `java -cp target/rsa-pss-signer.jar co.edu.icesi.signer.gui.GuiMain`.
 
 ## Requirements

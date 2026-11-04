@@ -1,32 +1,37 @@
 package co.edu.icesi.signer.gui;
 
+import co.edu.icesi.signer.gui.I18n.Language;
 import java.awt.CardLayout;
 import javax.swing.JPanel;
 
-/** The window content: the application, or the user guide on top of it on first run. */
+/**
+ * The window content: the application, or the user guide on top of it on first run.
+ * Changing the language rebuilds both, keeping the page and the non-secret fields.
+ * Passwords are not carried over, and they are not kept anywhere else either.
+ */
 final class AppRoot extends JPanel {
     private static final long serialVersionUID = 1L;
 
     private static final String APP = "app";
     private static final String GUIDE = "guide";
 
-    final AppShell shell;
-    final UserGuide guide;
+    AppShell shell;
+    UserGuide guide;
 
     private final CardLayout cards = new CardLayout();
-    private final GuideState state;
+    private final transient GuiActions actions;
+    private final transient Settings settings;
     private boolean guideShown;
 
-    AppRoot(GuiActions actions, GuideState state) {
-        this.state = state;
+    AppRoot(GuiActions actions, Settings settings) {
+        this.actions = actions;
+        this.settings = settings;
         setLayout(cards);
         setBackground(Theme.BACKGROUND);
-        shell = new AppShell(actions, this::openGuide);
-        guide = new UserGuide(this::closeGuide);
-        add(shell, APP);
-        add(guide, GUIDE);
-        if (state.seen()) {
-            closeWithoutSaving();
+        I18n.use(settings.language());
+        build();
+        if (settings.guideSeen()) {
+            showApp();
         } else {
             openGuide();
         }
@@ -36,6 +41,31 @@ final class AppRoot extends JPanel {
         return guideShown;
     }
 
+    private void build() {
+        removeAll();
+        shell = new AppShell(actions, this::openGuide, this::changeLanguage);
+        guide = new UserGuide(this::closeGuide, this::changeLanguage);
+        add(shell, APP);
+        add(guide, GUIDE);
+    }
+
+    void changeLanguage(Language language) {
+        if (language == I18n.current()) {
+            return;
+        }
+        settings.language(language);
+        I18n.use(language);
+
+        AppShell oldShell = shell;
+        int guidePage = guide.currentPage();
+        build();
+        shell.keepFieldsOf(oldShell);
+        guide.show(guidePage);
+        cards.show(this, guideShown ? GUIDE : APP);
+        revalidate();
+        repaint();
+    }
+
     private void openGuide() {
         guide.show(0);
         cards.show(this, GUIDE);
@@ -43,11 +73,11 @@ final class AppRoot extends JPanel {
     }
 
     private void closeGuide() {
-        state.markSeen();
-        closeWithoutSaving();
+        settings.markGuideSeen();
+        showApp();
     }
 
-    private void closeWithoutSaving() {
+    private void showApp() {
         cards.show(this, APP);
         guideShown = false;
     }

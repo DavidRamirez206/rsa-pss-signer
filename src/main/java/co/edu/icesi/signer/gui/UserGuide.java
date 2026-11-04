@@ -1,5 +1,8 @@
 package co.edu.icesi.signer.gui;
 
+import static co.edu.icesi.signer.gui.I18n.t;
+
+import co.edu.icesi.signer.gui.I18n.Language;
 import co.edu.icesi.signer.gui.Widgets.Card;
 import co.edu.icesi.signer.gui.Widgets.GhostButton;
 import co.edu.icesi.signer.gui.Widgets.PrimaryButton;
@@ -12,7 +15,9 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagLayout;
 import java.awt.RenderingHints;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -32,54 +37,45 @@ final class UserGuide extends JPanel {
     private record Page(Icon icon, String title, String intro, List<Point> points) {
     }
 
-    private static Point step(String title, String text) {
-        return new Point(Icons.check(20, Theme.RED_BRIGHT), title, text);
+    /** The pages, built on demand because their text depends on the language. */
+    private static List<Page> pages() {
+        Icon check = Icons.check(20, Theme.RED_BRIGHT);
+        return List.of(
+                page(0, Icons.brand(44), Icons.key(20, Theme.RED_BRIGHT), Icons.pen(20, Theme.RED_BRIGHT),
+                        Icons.shieldCheck(20, Theme.RED_BRIGHT)),
+                page(1, Icons.key(40, Theme.RED_BRIGHT), check, check, check, check),
+                page(2, Icons.pen(40, Theme.RED_BRIGHT), check, check, check),
+                page(3, Icons.shieldCheck(40, Theme.RED_BRIGHT), Icons.check(20, Theme.SUCCESS),
+                        Icons.cross(20, Theme.RED_BRIGHT), Icons.warning(20, Theme.WARNING)),
+                page(4, Icons.warning(40, Theme.WARNING), check, check, check));
     }
 
-    static final List<Page> PAGES = List.of(
-            new Page(Icons.brand(44), "Welcome to RSA-PSS Signer",
-                    "Sign files so that anyone can confirm they have not changed and which key signed them."
-                            + " Files are not encrypted: they stay readable.",
-                    List.of(
-                            new Point(Icons.key(20, Theme.RED_BRIGHT), "Generate keys", "Create your private and public key, once."),
-                            new Point(Icons.pen(20, Theme.RED_BRIGHT), "Sign", "Produce a signature for any file with your private key."),
-                            new Point(Icons.shieldCheck(20, Theme.RED_BRIGHT), "Verify", "Check a file with its signature and the signer's public key."))),
-            new Page(Icons.key(40, Theme.RED_BRIGHT), "1. Generate your keys",
-                    "Open Generate keys. You only need to do this once.",
-                    List.of(
-                            step("Save as", "Pick a folder and a base name. \"ana\" creates ana.key and ana.pub."),
-                            step("Password", "Use at least 12 characters. It cannot be recovered if you forget it."),
-                            step("Keep ana.key private", "Never send it to anyone, even though it is encrypted."),
-                            step("Share ana.pub", "Give the public key, and its fingerprint, to whoever will verify your files."))),
-            new Page(Icons.pen(40, Theme.RED_BRIGHT), "2. Sign a file",
-                    "Open Sign. Choose the file and your .key, enter your name and your password.",
-                    List.of(
-                            step("The signature is a new file", "contract.pdf produces contract.pdf.sig next to it. Nothing is overwritten."),
-                            step("Send three things", "The file, its .sig and your .pub."),
-                            step("Your name and date are declared", "They are protected by the signature, but they are what you state, not verified facts."))),
-            new Page(Icons.shieldCheck(40, Theme.RED_BRIGHT), "3. Verify a signature",
-                    "Open Verify. Choose the file, its .sig and the signer's .pub. No password is needed.",
-                    List.of(
-                            new Point(Icons.check(20, Theme.SUCCESS), "VALID", "The file is unchanged and was signed with this key."),
-                            new Point(Icons.cross(20, Theme.RED_BRIGHT), "INVALID", "The file or the signed details changed, or the signature does not match. Do not trust it."),
-                            new Point(Icons.warning(20, Theme.WARNING), "ERROR", "No decision could be made, for example a damaged file or a key that is not allowed. Nothing is confirmed."))),
-            new Page(Icons.warning(40, Theme.WARNING), "Before you trust a signature",
-                    "VALID proves who holds the key, not who that person is. Anyone can create a key under any name.",
-                    List.of(
-                            step("Compare the fingerprint", "Check it with the signer in person or by phone, not through the channel that delivered the file."),
-                            step("Protect your password", "Whoever has your .key can try passwords offline, so the password is the real protection."),
-                            step("Renaming is not detected yet", "The file name is signed, but a renamed copy with the same content still verifies."))));
+    private static Page page(int number, Icon icon, Icon... pointIcons) {
+        String prefix = "guide." + number + ".";
+        List<Point> points = new ArrayList<>();
+        for (int i = 0; i < pointIcons.length; i++) {
+            String point = prefix + (i + 1);
+            points.add(new Point(pointIcons[i], t(point + ".title"), t(point + ".text")));
+        }
+        return new Page(icon, t(prefix + "title"), t(prefix + "intro"), points);
+    }
 
-    final GhostButton skip = new GhostButton("Skip");
-    final GhostButton back = new GhostButton("Back");
-    final PrimaryButton next = new PrimaryButton("Next");
+    static int pageCount() {
+        return pages().size();
+    }
+
+    final GhostButton skip = new GhostButton(t("guide.skip"));
+    final GhostButton back = new GhostButton(t("guide.back"));
+    final PrimaryButton next = new PrimaryButton(t("guide.next"));
 
     private final JPanel content = new JPanel(new BorderLayout());
     private final Dots dots = new Dots();
     private final JLabel counter = Widgets.label("", Theme.medium(12.5f), Theme.FAINT);
     private int page;
 
-    UserGuide(Runnable onClose) {
+    final LanguageSwitch languageSwitch;
+
+    UserGuide(Runnable onClose, Consumer<Language> onLanguage) {
         super(new GridBagLayout());
         setBackground(Theme.BACKGROUND);
         content.setOpaque(false);
@@ -94,7 +90,12 @@ final class UserGuide extends JPanel {
         top.setPreferredSize(new Dimension(0, 36));
         top.add(counter, BorderLayout.WEST);
         skip.setPreferredSize(new Dimension(84, 36));
-        top.add(skip, BorderLayout.EAST);
+        languageSwitch = new LanguageSwitch(onLanguage);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        actions.setOpaque(false);
+        actions.add(languageSwitch);
+        actions.add(skip);
+        top.add(actions, BorderLayout.EAST);
 
         JScrollPane scroll = new JScrollPane(content);
         scroll.setBorder(BorderFactory.createEmptyBorder());
@@ -135,17 +136,17 @@ final class UserGuide extends JPanel {
     }
 
     boolean isLastPage() {
-        return page == PAGES.size() - 1;
+        return page == pageCount() - 1;
     }
 
     /** Shows a page. Reopening the guide starts over with {@code show(0)}. */
     void show(int index) {
         page = index;
-        Page current = PAGES.get(index);
-        counter.setText("Page " + (index + 1) + " of " + PAGES.size());
+        Page current = pages().get(index);
+        counter.setText(t("guide.page", index + 1, pageCount()));
         back.setVisible(index > 0);
         skip.setVisible(!isLastPage());
-        next.setText(isLastPage() ? "Get started" : "Next");
+        next.setText(t(isLastPage() ? "guide.finish" : "guide.next"));
         dots.repaint();
         content.removeAll();
         content.add(render(current), BorderLayout.NORTH);
@@ -198,7 +199,7 @@ final class UserGuide extends JPanel {
 
         @Override
         public Dimension getPreferredSize() {
-            return new Dimension(PAGES.size() * (SIZE + GAP), 42);
+            return new Dimension(pageCount() * (SIZE + GAP), 42);
         }
 
         @Override
@@ -206,7 +207,7 @@ final class UserGuide extends JPanel {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int y = (getHeight() - SIZE) / 2;
-            for (int i = 0; i < PAGES.size(); i++) {
+            for (int i = 0; i < pageCount(); i++) {
                 Color color = i == page ? Theme.RED : Theme.BORDER;
                 g2.setColor(color);
                 g2.fillOval(i * (SIZE + GAP), y, SIZE, SIZE);

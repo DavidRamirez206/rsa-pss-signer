@@ -1,5 +1,7 @@
 package co.edu.icesi.signer.gui;
 
+import static co.edu.icesi.signer.gui.I18n.t;
+
 import co.edu.icesi.signer.gui.ResultCard.Tone;
 import co.edu.icesi.signer.gui.Widgets.Card;
 import co.edu.icesi.signer.gui.Widgets.PrimaryButton;
@@ -105,7 +107,7 @@ abstract class View extends JPanel {
     final <T> void run(PrimaryButton button, Callable<T> operation, Consumer<T> onSuccess) {
         String label = button.getText();
         button.setEnabled(false);
-        button.setText("Working…");
+        button.setText(t("common.working"));
         result.hideResult();
         new SwingWorker<T, Void>() {
             @Override
@@ -124,10 +126,10 @@ abstract class View extends JPanel {
                 } catch (ExecutionException e) {
                     Throwable cause = e.getCause();
                     if (cause instanceof GuiActions.ActionFailure) {
-                        result.show(Tone.CAUTION, "Could not complete the operation",
+                        result.show(Tone.CAUTION, t("common.failed"),
                                 List.of(cause.getMessage()), null, null);
                     } else {
-                        result.show(Tone.DANGER, "Unexpected error", List.of(String.valueOf(cause)), null, null);
+                        result.show(Tone.DANGER, t("common.unexpected"), List.of(String.valueOf(cause)), null, null);
                     }
                 }
             }

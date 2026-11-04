@@ -80,3 +80,7 @@ documentation, commit messages and PR titles.
 CI flags added lines that contain Spanish-only characters (accented vowels, the letter n with tilde, inverted question and exclamation marks) or
 common Spanish words. It is a heuristic, not a language detector. If a proper name
 triggers it, add the name to `.github/english-allowlist.txt`.
+
+The one exception is the Spanish text of the graphical interface, kept in
+`src/main/resources/i18n/messages_es.properties`. Interface text always goes through the
+message files, and both files must have the same keys (a test checks this).

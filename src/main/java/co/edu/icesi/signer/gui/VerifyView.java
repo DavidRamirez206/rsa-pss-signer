@@ -1,5 +1,7 @@
 package co.edu.icesi.signer.gui;
 
+import static co.edu.icesi.signer.gui.I18n.t;
+
 import co.edu.icesi.signer.core.VerificationOutcome;
 import co.edu.icesi.signer.gui.ResultCard.Tone;
 import co.edu.icesi.signer.gui.Widgets.PrimaryButton;
@@ -12,18 +14,18 @@ import java.util.List;
 final class VerifyView extends View {
     private static final long serialVersionUID = 1L;
 
-    final FilePicker file = new FilePicker("The file to check. You can also drop it here", false);
-    final FilePicker signature = new FilePicker("Its .sig file", false);
-    final FilePicker publicKey = new FilePicker("The signer's .pub file", false);
+    final FilePicker file = new FilePicker(t("verify.file.placeholder"), false);
+    final FilePicker signature = new FilePicker(t("verify.signature.placeholder"), false);
+    final FilePicker publicKey = new FilePicker(t("verify.key.placeholder"), false);
 
-    private final PrimaryButton verify = new PrimaryButton("Verify signature");
+    private final PrimaryButton verify = new PrimaryButton(t("verify.submit"));
 
     VerifyView(GuiActions actions) {
-        super(actions, "Verify a signature", "Check that a file is unchanged and was signed with a given key.");
+        super(actions, t("verify.title"), t("verify.subtitle"));
 
-        row(Widgets.field("File", file));
-        row(Widgets.field("Signature", signature));
-        row(Widgets.field("Public key", publicKey));
+        row(Widgets.field(t("verify.file"), file));
+        row(Widgets.field(t("verify.signature"), signature));
+        row(Widgets.field(t("verify.key"), publicKey));
         row(verify);
 
         file.onChange(this::suggestSignature);
@@ -54,13 +56,13 @@ final class VerifyView extends View {
 
     void present(VerificationOutcome outcome) {
         switch (outcome.result()) {
-            case VALID -> result.show(Tone.SUCCESS, "VALID", List.of(outcome.detail()), outcome.keyFingerprint(),
-                    "This proves who holds this key, not who the person is. Compare the fingerprint with"
-                            + " the signer through an independent channel.");
-            case INVALID -> result.show(Tone.DANGER, "INVALID", List.of(outcome.detail()), outcome.keyFingerprint(),
-                    "Do not trust this file with this signature.");
-            case ERROR -> result.show(Tone.CAUTION, "ERROR", List.of(outcome.detail()), outcome.keyFingerprint(),
-                    "No decision could be made, so nothing is confirmed about this file.");
+            case VALID -> result.show(Tone.SUCCESS, t("verify.valid"), List.of(t("verify.valid.detail")),
+                    outcome.keyFingerprint(), t("verify.valid.note"));
+            case INVALID -> result.show(Tone.DANGER, t("verify.invalid"), List.of(t("verify.invalid.detail")),
+                    outcome.keyFingerprint(), t("verify.invalid.note"));
+            // The technical detail comes from the services, which only speak English
+            case ERROR -> result.show(Tone.CAUTION, t("verify.error"), List.of(outcome.detail()),
+                    outcome.keyFingerprint(), t("verify.error.note"));
         }
     }
 }

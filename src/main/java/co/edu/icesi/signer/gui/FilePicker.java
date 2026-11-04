@@ -1,5 +1,7 @@
 package co.edu.icesi.signer.gui;
 
+import static co.edu.icesi.signer.gui.I18n.t;
+
 import co.edu.icesi.signer.gui.Widgets.GhostButton;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -23,7 +25,7 @@ final class FilePicker extends JPanel {
         path.putClientProperty("JTextField.placeholderText", placeholder);
         path.setFont(Theme.regular(13.5f));
         path.setTransferHandler(new DropHandler());
-        GhostButton browse = new GhostButton("Browse");
+        GhostButton browse = new GhostButton(t("common.browse"));
         browse.addActionListener(event -> choose(saving));
         add(path, BorderLayout.CENTER);
         add(browse, BorderLayout.EAST);

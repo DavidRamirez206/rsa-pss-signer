@@ -1,5 +1,7 @@
 package co.edu.icesi.signer.gui;
 
+import static co.edu.icesi.signer.gui.I18n.t;
+
 import co.edu.icesi.signer.cli.Cli;
 import co.edu.icesi.signer.core.VerificationOutcome;
 import co.edu.icesi.signer.crypto.HashAlg;
@@ -57,13 +59,13 @@ final class GuiActions {
     GeneratedKeys generateKeys(String base, int bits, char[] password, char[] confirmation) throws ActionFailure {
         try {
             if (base.isBlank()) {
-                throw new ActionFailure("Choose where to save the keys.");
+                throw new ActionFailure(t("failure.choose.base"));
             }
             if (password.length < Cli.MIN_PASSWORD_LENGTH) {
-                throw new ActionFailure("The password must have at least " + Cli.MIN_PASSWORD_LENGTH + " characters.");
+                throw new ActionFailure(t("failure.password.short", Cli.MIN_PASSWORD_LENGTH));
             }
             if (!Arrays.equals(password, confirmation)) {
-                throw new ActionFailure("The passwords do not match.");
+                throw new ActionFailure(t("failure.password.mismatch"));
             }
             Path keyFile = path(base + ".key");
             Path pubFile = path(base + ".pub");
@@ -88,10 +90,10 @@ final class GuiActions {
     Signature sign(String file, String key, String signer, HashAlg hash, char[] password) throws ActionFailure {
         try {
             if (file.isBlank() || key.isBlank()) {
-                throw new ActionFailure("Choose the file to sign and the private key.");
+                throw new ActionFailure(t("failure.choose.sign"));
             }
             if (signer.isBlank()) {
-                throw new ActionFailure("Enter the name of the signer.");
+                throw new ActionFailure(t("failure.signer"));
             }
             Path input = path(file);
             Path output = path(file + ".sig");
@@ -100,9 +102,9 @@ final class GuiActions {
             AtomicFileWriter.writePublic(output, sig.toJson());
             return new Signature(output, sig.header().keyFingerprint());
         } catch (WrongPasswordException e) {
-            throw new ActionFailure("Wrong password: the private key could not be opened.");
+            throw new ActionFailure(t("failure.password.wrong"));
         } catch (IllegalArgumentException e) {
-            throw new ActionFailure(e.getMessage());
+            throw new ActionFailure(t("failure.signer.control"));
         } catch (IOException | GeneralSecurityException e) {
             throw failure(e);
         } finally {
@@ -112,7 +114,7 @@ final class GuiActions {
 
     VerificationOutcome verify(String file, String sig, String publicKey) throws ActionFailure {
         if (file.isBlank() || sig.isBlank() || publicKey.isBlank()) {
-            throw new ActionFailure("Choose the file, its signature and the public key.");
+            throw new ActionFailure(t("failure.choose.verify"));
         }
         return VerificationService.verify(path(file), path(sig), path(publicKey));
     }
@@ -121,16 +123,16 @@ final class GuiActions {
         try {
             return Path.of(value.strip());
         } catch (InvalidPathException e) {
-            throw new ActionFailure("Invalid path: " + value);
+            throw new ActionFailure(t("failure.path", value));
         }
     }
 
     private static ActionFailure failure(Exception e) {
         if (e instanceof FileAlreadyExistsException) {
-            return new ActionFailure("Nothing was overwritten: " + ((FileAlreadyExistsException) e).getFile() + " already exists.");
+            return new ActionFailure(t("failure.exists", ((FileAlreadyExistsException) e).getFile()));
         }
         if (e instanceof NoSuchFileException) {
-            return new ActionFailure("File not found: " + ((NoSuchFileException) e).getFile());
+            return new ActionFailure(t("failure.missing", ((NoSuchFileException) e).getFile()));
         }
         return new ActionFailure(e.getMessage());
     }

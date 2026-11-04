@@ -1,5 +1,7 @@
 package co.edu.icesi.signer.gui;
 
+import static co.edu.icesi.signer.gui.I18n.t;
+
 import co.edu.icesi.signer.crypto.HashAlg;
 import co.edu.icesi.signer.gui.ResultCard.Tone;
 import co.edu.icesi.signer.gui.Widgets.PrimaryButton;
@@ -15,16 +17,16 @@ import javax.swing.JTextField;
 final class SignView extends View {
     private static final long serialVersionUID = 1L;
 
-    final FilePicker file = new FilePicker("The file to sign. You can also drop it here", false);
-    final FilePicker key = new FilePicker("Your .key file", false);
+    final FilePicker file = new FilePicker(t("sign.file.placeholder"), false);
+    final FilePicker key = new FilePicker(t("sign.key.placeholder"), false);
     final JTextField signer = new JTextField();
     final JPasswordField password = passwordField();
 
     private final JComboBox<String> hash = new JComboBox<>();
-    private final PrimaryButton sign = new PrimaryButton("Sign file");
+    private final PrimaryButton sign = new PrimaryButton(t("sign.submit"));
 
     SignView(GuiActions actions) {
-        super(actions, "Sign a file", "Produce a signature that proves the file has not changed since you signed it.");
+        super(actions, t("sign.title"), t("sign.subtitle"));
 
         for (HashAlg alg : HashAlg.values()) {
             hash.addItem(alg.jcaName());
@@ -33,16 +35,16 @@ final class SignView extends View {
         signer.setFont(Theme.regular(13.5f));
         signer.putClientProperty("JTextField.placeholderText", "Ana Perez");
 
-        row(Widgets.field("File", file));
-        row(Widgets.field("Private key", key));
+        row(Widgets.field(t("sign.file"), file));
+        row(Widgets.field(t("sign.key"), key));
 
         JPanel details = new JPanel(new GridLayout(1, 2, 14, 0));
         details.setOpaque(false);
-        details.add(Widgets.field("Signer name", signer));
-        details.add(Widgets.field("Hash", hash));
+        details.add(Widgets.field(t("sign.signer"), signer));
+        details.add(Widgets.field(t("sign.hash"), hash));
         details.setMaximumSize(new Dimension(Integer.MAX_VALUE, details.getPreferredSize().height));
         row(details);
-        row(Widgets.field("Password", password));
+        row(Widgets.field(t("common.password"), password));
         row(sign);
 
         sign.addActionListener(event -> submit());
@@ -57,10 +59,9 @@ final class SignView extends View {
         HashAlg alg = HashAlg.fromJcaName((String) hash.getSelectedItem()).orElse(HashAlg.SHA_256);
         run(sign, () -> actions.sign(input, keyFile, name, alg, typed), signature -> result.show(
                 Tone.SUCCESS,
-                "File signed",
-                List.of("Signature: " + signature.file()),
+                t("sign.done"),
+                List.of(t("sign.done.signature", signature.file())),
                 signature.fingerprint(),
-                "Send the signature with the file. The signer name and date are signed too, but they are"
-                        + " what the signer declares, not verified facts."));
+                t("sign.done.note")));
     }
 }

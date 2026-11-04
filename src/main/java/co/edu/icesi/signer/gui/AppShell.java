@@ -1,5 +1,8 @@
 package co.edu.icesi.signer.gui;
 
+import static co.edu.icesi.signer.gui.I18n.t;
+
+import co.edu.icesi.signer.gui.I18n.Language;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
@@ -15,6 +18,7 @@ import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -34,14 +38,18 @@ final class AppShell extends JPanel {
     private final CardLayout pages = new CardLayout();
     private final JPanel content = new JPanel(pages);
     private final List<NavItem> items = new ArrayList<>();
+    private String selected;
     private final transient Runnable openGuide;
 
     /** The sidebar entry that reopens the user guide. */
     JButton guideButton;
 
-    AppShell(GuiActions actions, Runnable openGuide) {
+    final LanguageSwitch languageSwitch;
+
+    AppShell(GuiActions actions, Runnable openGuide, Consumer<Language> onLanguage) {
         super(new BorderLayout());
         this.openGuide = openGuide;
+        this.languageSwitch = new LanguageSwitch(onLanguage);
         setBackground(Theme.BACKGROUND);
         keygen = new KeygenView(actions);
         sign = new SignView(actions);
@@ -57,7 +65,20 @@ final class AppShell extends JPanel {
         select("keygen");
     }
 
+    /** Takes the page and the non-secret fields of the shell this one replaces. */
+    void keepFieldsOf(AppShell other) {
+        keygen.base.value(other.keygen.base.value());
+        sign.file.value(other.sign.file.value());
+        sign.key.value(other.sign.key.value());
+        sign.signer.setText(other.sign.signer.getText());
+        verify.signature.value(other.verify.signature.value());
+        verify.file.value(other.verify.file.value());
+        verify.publicKey.value(other.verify.publicKey.value());
+        select(other.selected);
+    }
+
     void select(String page) {
+        selected = page;
         pages.show(content, page);
         items.forEach(item -> item.setActive(item.page.equals(page)));
     }
@@ -88,27 +109,33 @@ final class AppShell extends JPanel {
         words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS));
         words.setOpaque(false);
         words.add(Widgets.label("RSA-PSS", Theme.bold(16.5f), Theme.TEXT));
-        words.add(Widgets.label("Signer and verifier", Theme.regular(11.5f), Theme.MUTED));
+        words.add(Widgets.label(t("brand.subtitle"), Theme.regular(11.5f), Theme.MUTED));
         brand.add(words, BorderLayout.CENTER);
         side.add(brand);
         side.add(Box.createVerticalStrut(32));
 
-        side.add(navLabel("OPERATIONS"));
+        side.add(navLabel(t("nav.operations")));
         side.add(Box.createVerticalStrut(8));
-        addItem(side, "keygen", "Generate keys", Icons::key);
+        addItem(side, "keygen", t("nav.keygen"), Icons::key);
         side.add(Box.createVerticalStrut(4));
-        addItem(side, "sign", "Sign", Icons::pen);
+        addItem(side, "sign", t("nav.sign"), Icons::pen);
         side.add(Box.createVerticalStrut(4));
-        addItem(side, "verify", "Verify", Icons::shieldCheck);
+        addItem(side, "verify", t("nav.verify"), Icons::shieldCheck);
 
         side.add(Box.createVerticalGlue());
-        guideButton = new NavItem("guide", "User guide", Icons::book);
+        guideButton = new NavItem("guide", t("nav.guide"), Icons::book);
         guideButton.addActionListener(event -> openGuide.run());
         side.add(guideButton);
+        side.add(Box.createVerticalStrut(12));
+        JPanel language = new JPanel(new BorderLayout());
+        language.setOpaque(false);
+        language.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 0));
+        language.setAlignmentX(Component.LEFT_ALIGNMENT);
+        language.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        language.add(languageSwitch, BorderLayout.WEST);
+        side.add(language);
         side.add(Box.createVerticalStrut(14));
-        side.add(footerLine("RSASSA-PSS signatures"));
-        side.add(Box.createVerticalStrut(3));
-        side.add(footerLine("Fingerprints decide trust"));
+        side.add(footerLine(t("nav.footer")));
         return side;
     }
 

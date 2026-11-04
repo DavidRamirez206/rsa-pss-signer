@@ -144,7 +144,7 @@ Base package: `co.edu.icesi.signer`.
 | `keystore` | `WrongPasswordException`    | Wrong password → controlled message, never a stack trace.                                              |
 | `io`       | `AtomicFileWriter`          | Atomic write (temp file + `ATOMIC_MOVE`), 600 permissions.                                             |
 | `io`       | `FileHasher`                | Streaming hash of an `InputStream`.                                                                    |
-| `gui`      | `GuiMain`, `AppShell`, views | Swing interface for the three operations. `GuiActions` holds the logic, free of Swing, so it is tested without a display. `UserGuide` is shown on first run and can be skipped. |
+| `gui`      | `GuiMain`, `AppShell`, views | Swing interface for the three operations. `GuiActions` holds the logic, free of Swing, so it is tested without a display. `UserGuide` is shown on first run and can be skipped. `I18n` selects English or Spanish text. |
 | `io`       | `SafeFileReader`            | Reads only regular files, with a size limit, so a FIFO or huge file cannot hang the program.           |
 | `core`     | `VerificationResult` (enum) | `VALID(0)`, `INVALID(1)`, `ERROR(2)`.                                                                  |
 | `core`     | `VerificationOutcome`       | A `VerificationResult` plus its explanation and the key fingerprint.                                   |
