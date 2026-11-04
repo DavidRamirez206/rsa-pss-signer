@@ -75,7 +75,8 @@ class OpenSslKeyInteropTest {
                 "-passout", "file:" + passwordFile());
         assertEquals(0, result.exitCode, result.output);
 
-        assertEquals("RSA", new PrivateKeyStore().read(encrypted, PASSWORD.toCharArray()).getAlgorithm());
+        // A low-iteration store, since the production one rightly rejects this count
+        assertEquals("RSA", new PrivateKeyStore(1000).read(encrypted, PASSWORD.toCharArray()).getAlgorithm());
     }
 
     private Path passwordFile() throws IOException {
