@@ -76,11 +76,8 @@ Coverage report: `target/site/jacoco/index.html`.
 
 Native executables for Windows and Linux are produced by the **Release** workflow
 (`jlink` + `jpackage`, with a bundled Java runtime, so no Java install needed).
-Push a tag to build them:
-
-```bash
-git tag v1.0.0 && git push origin v1.0.0
-```
+Merging `develop` into `main` publishes a release automatically; see
+[CONTRIBUTING.md](CONTRIBUTING.md#releases) for how the version is chosen.
 
 Each archive is published with its `.sha256` checksum.
 

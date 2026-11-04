@@ -1,23 +1,50 @@
 name: Release
 
-# Builds the Windows and Linux executables with jlink + jpackage.
-# jpackage cannot cross-compile, so each OS is packaged on its own runner.
-# Triggered by pushing a v* tag (e.g. v1.0.0) or manually.
+# Publishes a release when develop is merged into main: the version comes from the
+# Conventional Commits since the last release (see scripts/next-version.sh), and
+# commits that do not change the program publish nothing.
+# Builds the Windows and Linux executables with jlink + jpackage, which cannot
+# cross-compile, so each OS is packaged on its own runner.
+# Running it manually builds the executables without publishing anything.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Two quick merges must not compute the same version
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 env:
   APP_NAME: rsa-pss-signer
   MAIN_CLASS: co.edu.icesi.signer.cli.Main
 
 jobs:
+  version:
+    name: Compute next version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Next version from commits
+        id: next
+        run: |
+          tag="$(scripts/next-version.sh)"
+          echo "Next release: ${tag:-none}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
   package:
     name: Package (${{ matrix.os }})
+    needs: version
+    if: needs.version.outputs.tag != '' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -65,11 +92,12 @@ jobs:
       # --win-console is required: without it System.console() is null on Windows
       # and the program (by design) refuses to read the password.
       - name: Executable (jpackage app-image)
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag || 'v0.0.0' }}
         run: |
           EXTRA=()
           if [ "$RUNNER_OS" = "Windows" ]; then EXTRA+=(--win-console); fi
-          VERSION="${GITHUB_REF_NAME#v}"
-          [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] || VERSION=0.0.0
+          VERSION="${RELEASE_TAG#v}"
           jpackage --type app-image \
                    --name "$APP_NAME" \
                    --app-version "$VERSION" \
@@ -104,9 +132,9 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish release
-    needs: package
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Publish release ${{ needs.version.outputs.tag }}
+    needs: [version, package]
+    if: github.event_name == 'push' && needs.version.outputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -116,7 +144,10 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # Also creates the tag; a tag created with GITHUB_TOKEN triggers no other workflow
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: dist/*
           generate_release_notes: true

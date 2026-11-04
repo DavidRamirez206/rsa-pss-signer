@@ -51,6 +51,27 @@ test(keystore): cover wrong-password handling
 
 Pull request titles follow the same format, since squash merges use them as the commit message.
 
+## Releases
+
+Merging `develop` into `main` publishes a release on its own. The version comes from
+the commits since the last release:
+
+| Commits include                                | Version bump          |
+|------------------------------------------------|-----------------------|
+| `feat!:` or a `BREAKING CHANGE:` footer        | major (`1.2.3` to `2.0.0`) |
+| `feat:`                                        | minor (`1.2.3` to `1.3.0`) |
+| `fix:` or `perf:`                              | patch (`1.2.3` to `1.2.4`) |
+| Only `docs`, `ci`, `chore`, `test`, `build`... | no release            |
+
+The first release is `v0.1.0`.
+
+Use **Create a merge commit** for `develop` into `main`. A squash merge would hide the
+individual commits behind the PR title, and a title like `chore: merge develop into main`
+publishes nothing.
+
+Running the **Release** workflow manually builds the executables as downloadable
+artifacts without publishing anything.
+
 ## Language
 
 Everything in the repository is written in **English**: code, identifiers, comments,
