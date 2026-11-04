@@ -92,6 +92,47 @@ class AtomicFileWriterTest {
         assertEquals(missing.toString(), e.getFile());
     }
 
+    @Test
+    void replaceSwapsTheContentAndLeavesNoTemporaryFile() throws IOException {
+        Path target = Files.writeString(dir.resolve("out.sig"), "original");
+
+        AtomicFileWriter.replacePublic(target, CONTENT);
+
+        assertArrayEquals(CONTENT, Files.readAllBytes(target));
+        assertEquals(List.of("out.sig"), names());
+    }
+
+    @Test
+    void replaceAlsoCreatesAMissingFile() throws IOException {
+        Path target = dir.resolve("out.sig");
+
+        AtomicFileWriter.replacePublic(target, CONTENT);
+
+        assertArrayEquals(CONTENT, Files.readAllBytes(target));
+    }
+
+    @Test
+    void replaceRefusesADirectory() throws IOException {
+        Path target = Files.createDirectory(dir.resolve("folder"));
+
+        assertThrows(IOException.class, () -> AtomicFileWriter.replacePublic(target, CONTENT));
+
+        assertTrue(Files.isDirectory(target));
+    }
+
+    // T-5.3
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void replaceRefusesASymbolicLinkAndLeavesItsDestinationUntouched() throws IOException {
+        Path victim = Files.writeString(dir.resolve("victim"), "original");
+        Path link = Files.createSymbolicLink(dir.resolve("link"), victim);
+
+        assertThrows(IOException.class, () -> AtomicFileWriter.replacePublic(link, CONTENT));
+
+        assertEquals("original", Files.readString(victim));
+        assertTrue(Files.isSymbolicLink(link));
+    }
+
     // T-1.6
     @Test
     @DisabledOnOs(OS.WINDOWS)

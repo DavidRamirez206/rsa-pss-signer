@@ -22,9 +22,6 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.time.Clock;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -40,7 +37,7 @@ import java.util.Set;
  */
 public final class Cli {
 
-    static final int MIN_PASSWORD_LENGTH = 12;
+    public static final int MIN_PASSWORD_LENGTH = 12;
 
     private static final int EXIT_OK = VerificationResult.VALID.exitCode();
     private static final int EXIT_ERROR = VerificationResult.ERROR.exitCode();
@@ -177,9 +174,7 @@ public final class Cli {
             Arrays.fill(password, '\0');
         }
 
-        String signedAt = OffsetDateTime.now(clock)
-                .truncatedTo(ChronoUnit.SECONDS)
-                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        String signedAt = SigningService.timestamp(clock);
         SigFile sig;
         try {
             sig = SigningService.sign(file, privateKey, hash, signer, signedAt);

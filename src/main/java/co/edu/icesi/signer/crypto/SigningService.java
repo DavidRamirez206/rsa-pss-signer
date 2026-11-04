@@ -8,11 +8,22 @@ import java.security.GeneralSecurityException;
 import java.security.Signature;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPublicKey;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 
 /** Signs files with RSASSA-PSS over the canonical header and the file digest. */
 public final class SigningService {
 
     private SigningService() {
+    }
+
+    /** The current time as the signer declares it: ISO-8601 with an offset, in whole seconds. */
+    public static String timestamp(Clock clock) {
+        return OffsetDateTime.now(clock)
+                .truncatedTo(ChronoUnit.SECONDS)
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
     }
 
     /**
