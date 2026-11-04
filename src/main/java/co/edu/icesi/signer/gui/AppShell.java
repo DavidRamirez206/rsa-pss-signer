@@ -34,9 +34,14 @@ final class AppShell extends JPanel {
     private final CardLayout pages = new CardLayout();
     private final JPanel content = new JPanel(pages);
     private final List<NavItem> items = new ArrayList<>();
+    private final transient Runnable openGuide;
 
-    AppShell(GuiActions actions) {
+    /** The sidebar entry that reopens the user guide. */
+    JButton guideButton;
+
+    AppShell(GuiActions actions, Runnable openGuide) {
         super(new BorderLayout());
+        this.openGuide = openGuide;
         setBackground(Theme.BACKGROUND);
         keygen = new KeygenView(actions);
         sign = new SignView(actions);
@@ -97,6 +102,10 @@ final class AppShell extends JPanel {
         addItem(side, "verify", "Verify", Icons::shieldCheck);
 
         side.add(Box.createVerticalGlue());
+        guideButton = new NavItem("guide", "User guide", Icons::book);
+        guideButton.addActionListener(event -> openGuide.run());
+        side.add(guideButton);
+        side.add(Box.createVerticalStrut(14));
         side.add(footerLine("RSASSA-PSS signatures"));
         side.add(Box.createVerticalStrut(3));
         side.add(footerLine("Fingerprints decide trust"));

@@ -64,6 +64,9 @@ From a source build, run `java -jar target/rsa-pss-signer.jar ...` after `mvn pa
 with the same checks. The password field never shows what is typed, and files can be dropped
 onto the path fields.
 
+The first time it opens, a short user guide walks through the three operations. It can be
+skipped, and reopened at any time from **User guide** in the sidebar.
+
 From a source build: `java -cp target/rsa-pss-signer.jar co.edu.icesi.signer.gui.GuiMain`.
 
 ## Requirements

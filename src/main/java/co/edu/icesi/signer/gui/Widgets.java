@@ -14,12 +14,14 @@ import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
+import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JTextArea;
 import javax.swing.SwingConstants;
 
 /** Small painted components shared by the views. */
@@ -48,6 +50,32 @@ final class Widgets {
         column.add(input);
         column.setMaximumSize(new Dimension(Integer.MAX_VALUE, column.getPreferredSize().height));
         return column;
+    }
+
+    /** Selectable text that wraps, for paths and messages that can be long. */
+    static JTextArea wrapped(String text, Font font, Color color) {
+        JTextArea area = new JTextArea(text) {
+            private static final long serialVersionUID = 1L;
+
+            // Its height depends on its width, so a new width means a new layout
+            @Override
+            public void setBounds(int x, int y, int width, int height) {
+                boolean rewrap = width != getWidth();
+                super.setBounds(x, y, width, height);
+                if (rewrap) {
+                    revalidate();
+                }
+            }
+        };
+        area.setFont(font);
+        area.setForeground(color);
+        area.setOpaque(false);
+        area.setEditable(false);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setBorder(BorderFactory.createEmptyBorder());
+        area.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return area;
     }
 
     private static void quality(Graphics2D g) {

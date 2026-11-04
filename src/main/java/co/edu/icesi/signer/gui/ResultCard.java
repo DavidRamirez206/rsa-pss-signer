@@ -6,7 +6,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.util.List;
@@ -15,7 +14,6 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JTextArea;
 
 /** The outcome of an operation, colored by what it means. Hidden until there is one. */
 final class ResultCard extends Card {
@@ -78,7 +76,7 @@ final class ResultCard extends Card {
         body.add(Widgets.label(title, Theme.semiBold(15.5f), tone.color));
         for (String line : lines) {
             body.add(Box.createVerticalStrut(5));
-            body.add(wrapped(line, Theme.regular(13.5f), Theme.TEXT));
+            body.add(Widgets.wrapped(line, Theme.regular(13.5f), Theme.TEXT));
         }
         if (fingerprint != null) {
             body.add(Box.createVerticalStrut(12));
@@ -88,7 +86,7 @@ final class ResultCard extends Card {
         }
         if (note != null) {
             body.add(Box.createVerticalStrut(10));
-            body.add(wrapped(note, Theme.regular(12.5f), Theme.MUTED));
+            body.add(Widgets.wrapped(note, Theme.regular(12.5f), Theme.MUTED));
         }
         setVisible(true);
         revalidate();
@@ -99,7 +97,7 @@ final class ResultCard extends Card {
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(false);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        row.add(wrapped(inTwoLines(fingerprint), Theme.fingerprint(12.5f), Theme.TEXT), BorderLayout.CENTER);
+        row.add(Widgets.wrapped(inTwoLines(fingerprint), Theme.fingerprint(12.5f), Theme.TEXT), BorderLayout.CENTER);
         GhostButton copy = new GhostButton("Copy");
         copy.setIcon(Icons.copy(14, Theme.TEXT));
         copy.setPreferredSize(new Dimension(88, 34));
@@ -117,31 +115,5 @@ final class ResultCard extends Card {
         int middle = fingerprint.length() / 2 + 1;
         boolean even = fingerprint.length() > middle && fingerprint.charAt(middle - 1) == ':';
         return even ? fingerprint.substring(0, middle) + "\n" + fingerprint.substring(middle) : fingerprint;
-    }
-
-    /** Selectable text that wraps, for paths and messages that can be long. */
-    private static JTextArea wrapped(String text, Font font, Color color) {
-        JTextArea area = new JTextArea(text) {
-            private static final long serialVersionUID = 1L;
-
-            // Its height depends on its width, so a new width means a new layout
-            @Override
-            public void setBounds(int x, int y, int width, int height) {
-                boolean rewrap = width != getWidth();
-                super.setBounds(x, y, width, height);
-                if (rewrap) {
-                    revalidate();
-                }
-            }
-        };
-        area.setFont(font);
-        area.setForeground(color);
-        area.setOpaque(false);
-        area.setEditable(false);
-        area.setLineWrap(true);
-        area.setWrapStyleWord(true);
-        area.setBorder(BorderFactory.createEmptyBorder());
-        area.setAlignmentX(Component.LEFT_ALIGNMENT);
-        return area;
     }
 }

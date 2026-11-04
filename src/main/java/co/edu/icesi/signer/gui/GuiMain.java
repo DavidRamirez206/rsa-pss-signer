@@ -19,7 +19,8 @@ public final class GuiMain {
             Theme.install();
             JFrame frame = new JFrame("RSA-PSS Signer");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.setContentPane(new AppShell(new GuiActions(new PrivateKeyStore(), Clock.systemDefaultZone())));
+            frame.setContentPane(new AppRoot(
+                    new GuiActions(new PrivateKeyStore(), Clock.systemDefaultZone()), new StoredGuideState()));
             frame.setMinimumSize(new Dimension(880, 640));
             frame.setSize(1040, 720);
             frame.setLocationRelativeTo(null);

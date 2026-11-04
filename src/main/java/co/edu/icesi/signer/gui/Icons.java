@@ -140,6 +140,21 @@ final class Icons {
         });
     }
 
+    static Icon book(int size, Color color) {
+        return icon(size, color, g -> {
+            Path2D p = new Path2D.Double();
+            p.moveTo(12, 6.5);
+            p.curveTo(10, 4.5, 7, 4, 3.5, 4.5);
+            p.lineTo(3.5, 18.5);
+            p.curveTo(7, 18, 10, 18.5, 12, 20.5);
+            p.curveTo(14, 18.5, 17, 18, 20.5, 18.5);
+            p.lineTo(20.5, 4.5);
+            p.curveTo(17, 4, 14, 4.5, 12, 6.5);
+            g.draw(p);
+            g.draw(new Line2D.Double(12, 6.5, 12, 20.5));
+        });
+    }
+
     /** The brand mark: a filled shield with a gradient. */
     static Icon brand(int size) {
         return icon(size, Theme.RED, g -> {

@@ -34,7 +34,7 @@ class InterfaceTest {
     }
 
     private static AppShell shell() {
-        return new AppShell(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC()));
+        return new AppShell(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC()), () -> { });
     }
 
     private static void layOut(Component component) {
