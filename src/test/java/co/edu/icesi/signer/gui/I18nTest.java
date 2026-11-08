@@ -8,6 +8,7 @@ import co.edu.icesi.signer.core.VerificationOutcome;
 import co.edu.icesi.signer.core.VerificationResult;
 import co.edu.icesi.signer.gui.I18n.Language;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
+import co.edu.icesi.signer.policy.TestState;
 import java.time.Clock;
 import java.util.Locale;
 import java.util.ResourceBundle;
@@ -98,7 +99,7 @@ class I18nTest {
         I18n.use(Language.SPANISH);
         SwingUtilities.invokeAndWait(() -> {
             Theme.install();
-            VerifyView view = new VerifyView(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC()));
+            VerifyView view = new VerifyView(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC(), TestState.fresh()));
 
             view.present(new VerificationOutcome(VerificationResult.VALID, "detail", null));
             assertEquals(ResultCard.Tone.SUCCESS, view.result.tone());

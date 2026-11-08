@@ -1,6 +1,7 @@
 package co.edu.icesi.signer.gui;
 
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
+import co.edu.icesi.signer.policy.LocalState;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.Image;
@@ -39,7 +40,7 @@ public final class GuiMain {
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setIconImages(windowIcons());
             frame.setContentPane(new AppRoot(
-                    new GuiActions(new PrivateKeyStore(), Clock.systemDefaultZone()), new StoredSettings()));
+                    new GuiActions(new PrivateKeyStore(), Clock.systemDefaultZone(), LocalState.fromEnvironment()), new StoredSettings()));
             frame.setMinimumSize(new Dimension(880, 640));
             frame.setSize(1040, 720);
             frame.setLocationRelativeTo(null);

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.icesi.signer.format.SigFile;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
+import co.edu.icesi.signer.policy.TestState;
 import co.edu.icesi.signer.keystore.PublicKeyStore;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -60,7 +61,7 @@ class CliTest {
             return password;
         };
         cli = new Cli(spy, new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                new PrintStream(stderr, true, StandardCharsets.UTF_8), new PrivateKeyStore(1000), CLOCK);
+                new PrintStream(stderr, true, StandardCharsets.UTF_8), new PrivateKeyStore(1000), CLOCK, TestState.fresh());
     }
 
     private int run(String... args) {

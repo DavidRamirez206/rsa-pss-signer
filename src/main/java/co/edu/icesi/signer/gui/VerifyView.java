@@ -3,11 +3,13 @@ package co.edu.icesi.signer.gui;
 import static co.edu.icesi.signer.gui.I18n.t;
 
 import co.edu.icesi.signer.core.VerificationOutcome;
+import co.edu.icesi.signer.crypto.VerificationService;
 import co.edu.icesi.signer.gui.ResultCard.Tone;
 import co.edu.icesi.signer.gui.Widgets.PrimaryButton;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /** Verifies a file against its signature and a public key. No password is involved. */
@@ -56,9 +58,15 @@ final class VerifyView extends View {
 
     void present(VerificationOutcome outcome) {
         switch (outcome.result()) {
-            case VALID -> result.show(Tone.SUCCESS, t("verify.valid"), List.of(t("verify.valid.detail")),
-                    outcome.keyFingerprint(), t("verify.valid.note"));
-            case INVALID -> result.show(Tone.DANGER, t("verify.invalid"), List.of(t("verify.invalid.detail")),
+            // Notes and policy reasons come from the services, which only speak English
+            case VALID -> {
+                List<String> lines = new ArrayList<>(List.of(t("verify.valid.detail")));
+                lines.addAll(outcome.notes());
+                result.show(Tone.SUCCESS, t("verify.valid"), lines, outcome.keyFingerprint(), t("verify.valid.note"));
+            }
+            case INVALID -> result.show(Tone.DANGER, t("verify.invalid"),
+                    List.of(VerificationService.MISMATCH.equals(outcome.detail())
+                            ? t("verify.invalid.detail") : outcome.detail()),
                     outcome.keyFingerprint(), t("verify.invalid.note"));
             // The technical detail comes from the services, which only speak English
             case ERROR -> result.show(Tone.CAUTION, t("verify.error"), List.of(outcome.detail()),

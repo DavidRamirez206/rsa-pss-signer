@@ -11,6 +11,7 @@ import co.edu.icesi.signer.crypto.HashAlg;
 import co.edu.icesi.signer.gui.GuiActions.ActionFailure;
 import co.edu.icesi.signer.gui.GuiActions.GeneratedKeys;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
+import co.edu.icesi.signer.policy.TestState;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -27,7 +28,7 @@ class GuiActionsTest {
     private static final String PASSWORD = "correct horse battery";
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-28T11:30:00Z"), ZoneOffset.UTC);
 
-    private final GuiActions actions = new GuiActions(new PrivateKeyStore(1000), CLOCK);
+    private final GuiActions actions = new GuiActions(new PrivateKeyStore(1000), CLOCK, TestState.fresh());
 
     @TempDir
     Path dir;
