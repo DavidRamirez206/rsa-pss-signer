@@ -6,10 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import co.edu.icesi.signer.core.VerificationOutcome;
 import co.edu.icesi.signer.core.VerificationResult;
 import co.edu.icesi.signer.crypto.HashAlg;
 import co.edu.icesi.signer.gui.GuiActions.ActionFailure;
 import co.edu.icesi.signer.gui.GuiActions.GeneratedKeys;
+import co.edu.icesi.signer.gui.GuiActions.Signature;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
 import co.edu.icesi.signer.policy.TestState;
 import java.nio.file.Files;
@@ -200,6 +202,44 @@ class GuiActionsTest {
 
         assertEquals(VerificationResult.VALID, actions.verify(
                 file.toString(), sig.toString(), keys.publicKey().toString()).result());
+    }
+
+    // T-2.6': re-signing an edited file signs its next version
+    @Test
+    void replacingASignatureWithTheSameKeySignsTheNextVersion() throws Exception {
+        GeneratedKeys keys = generate("ana");
+        Path file = Files.writeString(dir.resolve("contract.txt"), "content");
+        String key = keys.privateKey().toString();
+        assertEquals(1, actions.sign(file.toString(), key, "Ana", HashAlg.SHA_256, password()).docVersion());
+
+        Files.writeString(file, "edited content");
+        Signature second = actions.sign(file.toString(), key, "Ana", HashAlg.SHA_256, password(), true);
+
+        assertEquals(2, second.docVersion());
+        VerificationOutcome outcome = actions.verify(file.toString(), second.file().toString(),
+                keys.publicKey().toString());
+        assertEquals(VerificationResult.VALID, outcome.result(), outcome.detail());
+        assertTrue(outcome.notes().contains("Document version 2 of contract.txt."), outcome.notes().toString());
+    }
+
+    @Test
+    void replacingAnotherKeysSignatureStartsAgainAtVersionOne() throws Exception {
+        GeneratedKeys ana = generate("ana");
+        GeneratedKeys bob = generate("bob");
+        Path file = Files.writeString(dir.resolve("contract.txt"), "content");
+        actions.sign(file.toString(), ana.privateKey().toString(), "Ana", HashAlg.SHA_256, password());
+
+        assertEquals(1, actions.sign(file.toString(), bob.privateKey().toString(), "Bob", HashAlg.SHA_256,
+                password(), true).docVersion());
+    }
+
+    @Test
+    void signingAFormatThatCanHideContentSaysSo() throws Exception {
+        GeneratedKeys keys = generate("ana");
+        Path file = Files.writeString(dir.resolve("report.docx"), "content");
+
+        assertTrue(actions.sign(file.toString(), keys.privateKey().toString(), "Ana", HashAlg.SHA_256, password())
+                .canHideContent());
     }
 
     @Test

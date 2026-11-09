@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.PrivateKey;
+import java.security.Provider;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.cert.CertPathValidator;
@@ -39,6 +40,7 @@ import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
@@ -51,6 +53,7 @@ public final class MiniCa {
     /** Certificates are signed with RSASSA-PSS too, like the signatures. */
     private static final String SIGNATURE_ALGORITHM = "SHA256withRSAandMGF1";
     private static final String PEM_TYPE = "CERTIFICATE";
+    private static final Provider BOUNCY_CASTLE = new BouncyCastleProvider();
 
     private MiniCa() {
     }
@@ -94,7 +97,7 @@ public final class MiniCa {
                     ? new KeyUsage(KeyUsage.keyCertSign | KeyUsage.cRLSign)
                     : new KeyUsage(KeyUsage.digitalSignature | KeyUsage.nonRepudiation));
             return new JcaX509CertificateConverter().getCertificate(
-                    builder.build(new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).build(issuerKey)));
+                    builder.build(new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BOUNCY_CASTLE).build(issuerKey)));
         } catch (CertIOException | OperatorCreationException e) {
             throw new GeneralSecurityException("Could not build the certificate: " + e.getMessage(), e);
         }
