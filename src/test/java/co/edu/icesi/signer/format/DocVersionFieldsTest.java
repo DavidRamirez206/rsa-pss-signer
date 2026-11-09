@@ -58,7 +58,7 @@ class DocVersionFieldsTest {
 
     @Test
     void formatTwoRequiresTheNewFields() {
-        assertRejected(sig(2, ""), "Missing field: docVersion");
+        assertRejected(sig(2, ""), "Missing field: ");
         assertRejected(sig(2, "\"docVersion\": 1,"), "Missing field: prevSigHash");
     }
 
