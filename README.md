@@ -37,7 +37,7 @@ Full design document: [docs/design.md](docs/design.md).
 ```
 co.edu.icesi.signer
 ├── cli       Main, Cli (run(args) -> exit code), PasswordProvider
-├── core      VerificationResult, VerificationOutcome, FileReview
+├── core      VerificationResult, VerificationOutcome, Message, FileReview
 ├── crypto    KeyPairService, SigningService, VerificationService, HashAlg, PssParams
 ├── gui       GuiMain, AppShell, the three views, GuiActions, Theme
 ├── format    SigFile, CanonicalHeader, SigValidationException
@@ -45,7 +45,7 @@ co.edu.icesi.signer
 ├── io        AtomicFileWriter, FileHasher, SafeFileReader
 ├── policy    PolicyVerifier, TrustStore, VersionStore, LocalState
 ├── pki       MiniCa
-└── timestamp TimeAuthority, TimeToken
+└── timestamp TimeAuthority, TimeToken, TimeServer, TimeClient
 ```
 
 ## Usage
@@ -84,15 +84,25 @@ rsa-pss-signer ca init --out ca --name "ICESI Demo CA"
 rsa-pss-signer ca issue --ca ca --pub ana.pub --name "Ana Perez" --out ana.crt
 rsa-pss-signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt
 
+# Revoking a certificate: the authority signs a revocation list, ca.crl, valid for 30 days
+rsa-pss-signer ca revoke --ca ca --cert ana.crt
+rsa-pss-signer ca crl --ca ca     # renews the list without revoking anything
+rsa-pss-signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt --crl ca.crl
+
 # A time stamp from a time authority's key and clock
 rsa-pss-signer tsa stamp contract.txt.sig --key tsa.key
 rsa-pss-signer verify contract.txt --sig contract.txt.sig --pub ana.pub --timestamp contract.txt.sig.tst --tsa-pub tsa.pub
+
+# The same time authority as an HTTP service; requests send only the hash of the .sig
+rsa-pss-signer tsa serve --key tsa.key            # http://127.0.0.1:8318 until Ctrl+C
+rsa-pss-signer tsa request contract.txt.sig --url http://127.0.0.1:8318
 ```
 
 Verifying remembers, on this machine, the key of each signer name and the highest version of each
 document, in `~/.rsa-pss-signer` (or the directory in `RSA_PSS_SIGNER_HOME`). A different key under
 a known name, or an older version than one already verified, gives `INVALID`. That memory is local:
-another machine has not seen what this one has.
+another machine has not seen what this one has. In the interface, a changed key offers a button
+to forget the pinned one, after confirming the new fingerprint with the signer.
 
 Renaming a signed file keeps it `VALID`: the signature protects the content. The name used when
 signing is signed too and shown in the `.sig`.

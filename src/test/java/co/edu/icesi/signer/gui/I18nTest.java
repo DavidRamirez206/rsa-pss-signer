@@ -9,6 +9,8 @@ import co.edu.icesi.signer.core.VerificationResult;
 import co.edu.icesi.signer.gui.I18n.Language;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
 import co.edu.icesi.signer.policy.TestState;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Locale;
 import java.util.ResourceBundle;
@@ -16,6 +18,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +41,28 @@ class I18nTest {
     @Test
     void bothLanguagesHaveExactlyTheSameKeys() {
         assertEquals(new TreeSet<>(ENGLISH.keySet()), new TreeSet<>(SPANISH.keySet()));
+    }
+
+    // The services name their messages by key: a typo would only show up as a crash in the window
+    @Test
+    void everyMessageTheServicesUseExists() throws Exception {
+        Pattern use = Pattern.compile("Message\\.of\\(\\s*(?:pinNow \\? )?\"([a-z.]+)\"(?:\\s*:\\s*\"([a-z.]+)\")?");
+        Set<String> used = new TreeSet<>();
+        try (Stream<Path> files = Files.walk(Path.of("src/main/java"))) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                Matcher matcher = use.matcher(Files.readString(file));
+                while (matcher.find()) {
+                    used.add(matcher.group(1));
+                    if (matcher.group(2) != null) {
+                        used.add(matcher.group(2));
+                    }
+                }
+            }
+        }
+        assertTrue(used.size() >= 20, used.toString());
+        for (String key : used) {
+            assertTrue(ENGLISH.containsKey(key), key);
+        }
     }
 
     @Test

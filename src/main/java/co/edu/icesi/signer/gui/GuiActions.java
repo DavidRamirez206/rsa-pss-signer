@@ -1,5 +1,6 @@
 package co.edu.icesi.signer.gui;
 
+import co.edu.icesi.signer.policy.TrustStore;
 import static co.edu.icesi.signer.gui.I18n.t;
 
 import co.edu.icesi.signer.cli.Cli;
@@ -61,11 +62,13 @@ final class GuiActions {
     private final PrivateKeyStore privateKeys;
     private final Clock clock;
     private final PolicyVerifier verifier;
+    private final TrustStore trust;
 
     GuiActions(PrivateKeyStore privateKeys, Clock clock, LocalState state) {
         this.privateKeys = privateKeys;
         this.clock = clock;
         this.verifier = new PolicyVerifier(state, clock);
+        this.trust = new TrustStore(state);
     }
 
     GeneratedKeys generateKeys(String base, int bits, char[] password, char[] confirmation) throws ActionFailure {
@@ -174,6 +177,17 @@ final class GuiActions {
             throw new ActionFailure(t("failure.choose.verify"));
         }
         return verifier.verify(PolicyVerifier.Request.of(path(file), path(sig), path(publicKey)));
+    }
+
+    /** Forgets the key pinned for a signer, so that its next valid signature pins a new one. */
+    void forget(String signerName) throws ActionFailure {
+        try {
+            if (!trust.remove(signerName)) {
+                throw new ActionFailure(t("failure.not.pinned", signerName));
+            }
+        } catch (IOException e) {
+            throw failure(e);
+        }
     }
 
     private static Path path(String value) throws ActionFailure {

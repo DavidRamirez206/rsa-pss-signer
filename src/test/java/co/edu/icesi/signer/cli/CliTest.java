@@ -1,5 +1,9 @@
 package co.edu.icesi.signer.cli;
 
+import java.security.interfaces.RSAPrivateCrtKey;
+import java.net.InetSocketAddress;
+import java.net.InetAddress;
+import co.edu.icesi.signer.timestamp.TimeServer;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -510,10 +514,45 @@ class CliTest {
         assertFalse(Files.exists(dir.resolve("ana.crt")));
     }
 
+    // T-2.7: the authority revokes a certificate and verifiers that use its list see it
+    @Test
+    void aRevokedCertificateIsInvalidWithTheAuthoritysList() throws Exception {
+        typedPasswords.add(PASSWORD);
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("ca", "init", "--out", path("ca"), "--name", "ICESI Demo CA"), err());
+        generateKeys("ana");
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("ca", "issue", "--ca", path("ca"), "--pub", path("ana.pub"), "--name", "Ana Perez",
+                "--out", path("ana.crt")), err());
+        signContract();
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("ca", "crl", "--ca", path("ca")), err());
+        assertTrue(out().contains("0 certificate(s) revoked"), out());
+        String[] verify = {"verify", contract.toString(), "--sig", contract + ".sig", "--cert", path("ana.crt"),
+            "--ca", path("ca.crt"), "--crl", path("ca.crl")};
+        assertEquals(0, run(verify), out() + err());
+        assertTrue(out().contains("- The certificate is not on the authority's revocation list"), out());
+
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("ca", "revoke", "--ca", path("ca"), "--cert", path("ana.crt")), err());
+        assertTrue(out().contains("Revoked: \"Ana Perez\""), out());
+        assertTrue(out().contains("1 certificate(s) revoked"), out());
+
+        assertEquals(1, run(verify), out() + err());
+        assertTrue(out().contains("INVALID: The certificate was revoked on"), out());
+        // Without the list nothing changes, and the output says so
+        assertEquals(0, run("verify", contract.toString(), "--sig", contract + ".sig", "--cert", path("ana.crt"),
+                "--ca", path("ca.crt")), out() + err());
+        assertTrue(out().contains("- Revocation was not checked"), out());
+    }
+
     @Test
     void caRejectsBadArguments() {
         assertEquals(2, run("ca"));
         assertEquals(2, run("ca", "revoke"));
+        assertEquals(2, run("ca", "crl", "--ca", path("ca"), "--cert", path("x.crt")));
+        assertEquals(2, run("verify", contract.toString(), "--sig", contract + ".sig", "--pub", path("a.pub"),
+                "--crl", path("ca.crl")));
         assertEquals(2, run("ca", "init", "--out", path("ca"), "--name", "X", "--days", "0"));
         assertTrue(err().contains("--days must be between"), err());
     }
@@ -533,10 +572,32 @@ class CliTest {
         assertTrue(out().contains("- Time stamp: this signature existed at 2026-10-28T11:30:00-05:00"), out());
     }
 
+    // T-2.8: the same, from a time authority running as a service
+    @Test
+    void aTimeStampCanBeRequestedFromARunningAuthority() throws Exception {
+        generateKeys("ana");
+        generateKeys("tsa");
+        signContract();
+        RSAPrivateCrtKey tsaKey = new PrivateKeyStore(1000).read(dir.resolve("tsa.key"), PASSWORD.toCharArray());
+        try (TimeServer server = TimeServer.start(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), tsaKey,
+                CLOCK)) {
+            assertEquals(0, run("tsa", "request", contract + ".sig", "--url", "http://127.0.0.1:" + server.port()),
+                    err());
+        }
+        assertTrue(out().contains("Time:       2026-10-28T11:30:00-05:00"), out());
+
+        assertEquals(0, run("verify", contract.toString(), "--sig", contract + ".sig", "--pub", path("ana.pub"),
+                "--timestamp", contract + ".sig.tst", "--tsa-pub", path("tsa.pub")), out() + err());
+        assertTrue(out().contains("- Time stamp: this signature existed at 2026-10-28T11:30:00-05:00"), out());
+    }
+
     @Test
     void tsaRejectsBadArguments() {
         assertEquals(2, run("tsa"));
         assertEquals(2, run("tsa", "serve"));
+        assertEquals(2, run("tsa", "serve", "--key", path("tsa.key"), "--port", "70000"));
+        assertEquals(2, run("tsa", "request", contract + ".sig", "--url", "ftp://example"));
+        assertEquals(2, run("tsa", "request", contract + ".sig", "--url", "http://127.0.0.1:1"));
         assertEquals(2, run("trust", "forget"));
     }
 }
