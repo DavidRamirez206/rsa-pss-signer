@@ -1,5 +1,6 @@
 package co.edu.icesi.signer.gui;
 
+import co.edu.icesi.signer.core.Message;
 import java.util.Locale;
 import java.util.ResourceBundle;
 import javax.swing.JComponent;
@@ -55,6 +56,11 @@ final class I18n {
     static String t(String key, Object... args) {
         String text = messages.getString(key);
         return args.length == 0 ? text : String.format(text, args);
+    }
+
+    /** A message from the services, in the current language. */
+    static String t(Message message) {
+        return message.in(messages);
     }
 
     static ResourceBundle load(Language language) {

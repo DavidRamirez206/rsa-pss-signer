@@ -36,6 +36,7 @@ final class ResultCard extends Card {
     private final JPanel body = new JPanel();
     private final JLabel icon = new JLabel();
     private Tone shown;
+    private GhostButton action;
 
     ResultCard() {
         super(new BorderLayout(14, 0));
@@ -67,13 +68,25 @@ final class ResultCard extends Card {
         return shown;
     }
 
+    /** The button offered with the last result, or null. */
+    GhostButton action() {
+        return action;
+    }
+
     /**
      * @param lines details, one per line
      * @param fingerprint shown with a Copy button when not null
      * @param note a closing remark in a quieter color when not null
      */
     void show(Tone tone, String title, List<String> lines, String fingerprint, String note) {
+        show(tone, title, lines, fingerprint, note, null, null);
+    }
+
+    /** Like the other {@code show}, with a button that runs {@code onAction} when {@code actionLabel} is set. */
+    void show(Tone tone, String title, List<String> lines, String fingerprint, String note, String actionLabel,
+            Runnable onAction) {
         shown = tone;
+        action = null;
         shownLines = List.copyOf(lines);
         colors(new Color(tone.color.getRed(), tone.color.getGreen(), tone.color.getBlue(), 0x14),
                 new Color(tone.color.getRed(), tone.color.getGreen(), tone.color.getBlue(), 0x70));
@@ -97,6 +110,13 @@ final class ResultCard extends Card {
         if (note != null) {
             body.add(Box.createVerticalStrut(10));
             body.add(Widgets.wrapped(note, Theme.regular(12.5f), Theme.MUTED));
+        }
+        if (actionLabel != null) {
+            action = new GhostButton(actionLabel);
+            action.setAlignmentX(Component.LEFT_ALIGNMENT);
+            action.addActionListener(event -> onAction.run());
+            body.add(Box.createVerticalStrut(12));
+            body.add(action);
         }
         setVisible(true);
         revalidate();

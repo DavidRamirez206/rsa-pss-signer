@@ -148,6 +148,7 @@ Base package: `co.edu.icesi.signer`.
 | `io`       | `SafeFileReader`            | Reads only regular files, with a size limit, so a FIFO or huge file cannot hang the program.           |
 | `core`     | `VerificationResult` (enum) | `VALID(0)`, `INVALID(1)`, `ERROR(2)`.                                                                  |
 | `core`     | `VerificationOutcome`       | A `VerificationResult` plus its explanation and the key fingerprint.                                   |
+| `core`     | `Message`                   | A text for the user as a key and its arguments: the command line prints it in English, the interface in the chosen language. |
 
 ### The result enum
 
@@ -433,7 +434,9 @@ All tests from the audit that are still valid are kept, and those that change wh
 | T-3.6     | Declared fingerprint ≠ key  | altered `keyFingerprint`                                   | ERROR (2), specific message                                                   | `FingerprintMismatchTest`                  | I    |
 | T-3.7     | Wrong key type              | EC `.pub`; `.key` as `.pub`; corrupt PEM                   | ERROR (2)                                                                     | `WrongKeyTypeTest` (`@ParameterizedTest`)  | U    |
 | T-4.1     | Public key substitution     | Mallory signs, hands over her `.pub`                       | VALID (0) + fingerprint in output; fingerprints differ                        | `KeySubstitutionTest`                      | I    |
-| T-4.1b    | Trust store                 | first key pinned / another key under the same name         | VALID (0) + "pinned" note / INVALID (1) "key changed"                          | `PolicyVerifierTest`, `CliTest`            | I    |
+| T-4.1b    | Trust store                 | first key pinned / another key under the same name         | VALID (0) + "pinned" note / INVALID (1) "key changed"; the interface offers to forget it after confirmation | `PolicyVerifierTest`, `CliTest`, `VerifyViewTest` | I    |
+| T-2.7     | Certificate revocation      | certificate on the authority's list / list expired, from another authority or renamed | INVALID (1) "revoked" / ERROR (2); without `--crl` VALID with a "not checked" note | `RevocationTest`, `CliTest`                | I    |
+| T-2.8     | Time authority as a service | stamp requested over HTTP; bad body, wrong method, oversized body, a stamp of something else | token verifies like a local one / 400, 405, 413, client error | `TimeServerTest`, `CliTest`                | I    |
 | T-4.2     | Weak key                    | `.pub` of 512, 1024, 1536 bits                             | ERROR (2); 2048 → accepted                                                    | `WeakKeyTest` (`@ParameterizedTest`)       | U    |
 | T-4.2b    | Invalid exponent            | e = 1, 3, even                                             | ERROR (2)                                                                     | `BadExponentTest`                          | U    |
 | T-4.3     | Three states / codes        | battery of good and bad inputs                             | correct 0/1/2; nothing is VALID by mistake                                    | `ExitCodeTest`                             | C    |
@@ -526,7 +529,7 @@ Prepare **in advance** (see checklist): a `demo/` directory with `contract.txt` 
 
 **Demo 7 — Trust store: Mallory again (≈1 min).** Verify Ana's signature (key pinned), then Mallory's signature as "Ana Perez" with her own key → **INVALID: The key for "Ana Perez" changed**. Closes Demo 1.
 
-**Demo 8 (optional) — Mini-PKI and time stamp (≈3 min).** Verify with `--cert`/`--ca` instead of `--pub`, and with `--timestamp`; then a certificate for another name → INVALID.
+**Demo 8 (optional) — Mini-PKI, revocation and time stamp (≈4 min).** Verify with `--cert`/`--ca` instead of `--pub`; a certificate for another name → INVALID. Ana's key is stolen: `ca revoke`, and with `--crl` her signature is now INVALID; with the old list it is still VALID (the limit). Then `--timestamp`, first with a token from the `tsa stamp` command and then from `tsa request` against the running service.
 
 All commands, with the setup, are in `demo/commands.sh` and `demo/commands.ps1`.
 
@@ -620,9 +623,10 @@ Three types: (1) broken by changing the design; (2) mitigated by shifting trust 
 - **Implemented:**
   - **(a)** `verify --expect-fingerprint <fp>`: the fingerprint received through another channel; spaces, colons and case are ignored. A different key gives INVALID.
   - **(b)** Trust on first use, automatic with `--pub` (CLI and interface): `trusted-keys.properties` in the local state directory maps signer name → fingerprint. The first valid signature pins the key with a note; another key under that name gives **INVALID "The key for … changed"**. `trust list` and `trust remove <name>` manage it.
-  - **(c)** Mini-PKI: `ca init` creates the authority (encrypted `.key` and self-signed `.crt`), `ca issue` signs a certificate that binds a name to a `.pub`, and `verify --cert <crt> --ca <ca.crt>` validates the chain with PKIX (issuer, validity, not an authority certificate) and requires the certificate's name to match `signerName`. Certificates are signed with RSASSA-PSS too. Nothing is pinned in this mode: the authority decides. There is no revocation.
+  - **(c)** Mini-PKI: `ca init` creates the authority (encrypted `.key` and self-signed `.crt`), `ca issue` signs a certificate that binds a name to a `.pub`, and `verify --cert <crt> --ca <ca.crt>` validates the chain with PKIX (issuer, validity, not an authority certificate) and requires the certificate's name to match `signerName`. Certificates are signed with RSASSA-PSS too. Nothing is pinned in this mode: the authority decides.
+  - **Revocation:** `ca revoke --ca <base> --cert <crt>` adds the certificate to `<base>.crl`, an X.509 revocation list signed by the authority and valid for 30 days; `ca crl` renews it without revoking anything. `verify --crl <ca.crl>` rejects a list that is expired, from another authority or not signed by it (ERROR), and gives **INVALID "The certificate was revoked on …"** for a listed certificate. Without `--crl` the result says that revocation was not checked. *Does not solve:* a verifier with an old copy of the list still accepts the key until that copy expires, and a revoked key also invalidates signatures made before the theft unless a time stamp proves when they were made.
 
-- **Tests:** `PolicyVerifierTest` (TOFU: pin, alert on change, removal, Mallory first), `ThirdPartyChecksTest` (valid chain → VALID; another authority, expired or authority certificate → ERROR; another name → INVALID), `CliTest`.
+- **Tests:** `PolicyVerifierTest` (TOFU: pin, alert on change, removal, Mallory first), `ThirdPartyChecksTest` (valid chain → VALID; another authority, expired or authority certificate → ERROR; another name → INVALID), `RevocationTest`, `CliTest`, `VerifyViewTest` (forgetting a pinned key from the interface).
 
 **2B. Signing time**
 
@@ -646,9 +650,9 @@ Three types: (1) broken by changing the design; (2) mitigated by shifting trust 
 
   3.  *Does not solve:* if the server lies or its key is stolen, the date is false. We only shift trust from the signer to the server.
 
-- **Implemented:** the toy authority is a command run by whoever holds the authority's key, on its own machine and clock: `tsa stamp <file.sig> --key tsa.key` writes `<file.sig>.tst`, a strict JSON token with the SHA-256 of the `.sig`, the authority's time and fingerprint, signed with RSASSA-PSS. `verify --timestamp <file.tst> --tsa-pub tsa.pub` checks it and shows the time. A token for another `.sig`, from another key or with an edited time gives INVALID. Real RFC 3161 is shown with OpenSSL against a public TSA in the demo scripts, not in the program.
+- **Implemented:** the toy authority is a command run by whoever holds the authority's key, on its own machine and clock: `tsa stamp <file.sig> --key tsa.key` writes `<file.sig>.tst`, a strict JSON token with the SHA-256 of the `.sig`, the authority's time and fingerprint, signed with RSASSA-PSS. `verify --timestamp <file.tst> --tsa-pub tsa.pub` checks it and shows the time. A token for another `.sig`, from another key or with an edited time gives INVALID. The same authority also runs as an HTTP service: `tsa serve --key tsa.key` listens on `127.0.0.1:8318`, and `tsa request <file.sig> --url http://host:port` sends only the SHA-256 of the `.sig` to `POST /stamp` and saves the token. Plain HTTP is enough because the token is signed: a tampered answer fails verification, and the client also rejects a token for another hash. Real RFC 3161 is shown with OpenSSL against a public TSA in the demo scripts, not in the program.
 
-- **Tests:** `ThirdPartyChecksTest` (valid token, another signature, another authority, backdated, malformed), `CliTest`.
+- **Tests:** `ThirdPartyChecksTest` (valid token, another signature, another authority, backdated, malformed), `TimeServerTest`, `CliTest`.
 
 ### Type 3 — Not breakable
 

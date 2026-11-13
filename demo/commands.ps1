@@ -3,6 +3,7 @@
 #   .\demo\commands.ps1 setup      once, the day before: keys, signatures, certificates
 #   .\demo\commands.ps1 1 ... 9    one demo
 #   .\demo\commands.ps1 all        every demo in order
+#   .\demo\commands.ps1 tsa        the time authority as a service, in a second window (demo 8)
 #
 # Run from a real console (the program reads passwords from it). Every password
 # prompt takes the same long demo password. Needs `mvn package` first. Demo 5 and the
@@ -75,6 +76,8 @@ function Setup {
     Signer ca init --out ca --name "ICESI Demo CA"; Check
     Signer ca issue --ca ca --pub ana.pub --name "Ana Perez" --out ana.crt; Check
     Signer ca issue --ca ca --pub mallory.pub --name "Mallory" --out mallory.crt; Check
+    Signer ca crl --ca ca; Check
+    Copy-Item ca.crl ca-empty.crl -Force
     Signer keygen --out tsa; Check
     Signer tsa stamp contract.txt.sig --key tsa.key; Check
 
@@ -161,8 +164,20 @@ function Demo8 {
     Step { Signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt }
     Step { Signer verify mallory\contract.txt --sig mallory\contract.txt.sig --cert mallory.crt --ca ca.crt }
     Pause-Demo
+    Say "Ana's laptop is stolen: the authority revokes her certificate"
+    Copy-Item ca-empty.crl ca.crl -Force
+    Step { Signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt --crl ca.crl }
+    Step { Signer ca revoke --ca ca --cert ana.crt }
+    Step { Signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt --crl ca.crl }
+    Say "The limit: whoever does not get the new list still accepts the key"
+    Step { Signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt --crl ca-empty.crl }
+    Pause-Demo
     Say "Time stamp from the time authority: the date no longer comes from Ana alone"
     Step { Signer verify contract.txt --sig contract.txt.sig --pub ana.pub --timestamp contract.txt.sig.tst --tsa-pub tsa.pub }
+    Say "The same from the authority as a service (.\demo\commands.ps1 tsa in another window)"
+    Remove-Item -ErrorAction SilentlyContinue contract.txt.sig.live.tst
+    Step { Signer tsa request contract.txt.sig --url http://127.0.0.1:8318 --out contract.txt.sig.live.tst }
+    Step { Signer verify contract.txt --sig contract.txt.sig --pub ana.pub --timestamp contract.txt.sig.live.tst --tsa-pub tsa.pub }
     Pause-Demo
     Say "Real RFC 3161 time stamp from a public authority (needs internet)"
     New-Item -ItemType Directory -Force rfc3161 | Out-Null
@@ -183,6 +198,10 @@ function Demo9 {
 
 if ($Demo -eq "setup") {
     Setup
+} elseif ($Demo -eq "tsa") {
+    if (-not (Test-Path $Work)) { throw "Run: .\demo\commands.ps1 setup" }
+    Set-Location $Work
+    Signer tsa serve --key tsa.key
 } elseif ($Demo -match '^[1-9]$' -or $Demo -eq "all") {
     if (-not (Test-Path $Work)) { throw "Run: .\demo\commands.ps1 setup" }
     Set-Location $Work
@@ -192,6 +211,6 @@ if ($Demo -eq "setup") {
         & "Demo$Demo"
     }
 } else {
-    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 8
+    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 9
     exit 2
 }

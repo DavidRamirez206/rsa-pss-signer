@@ -21,6 +21,13 @@ import co.edu.icesi.signer.policy.TrustStore;
 import co.edu.icesi.signer.timestamp.TimeAuthority;
 import co.edu.icesi.signer.timestamp.TimeToken;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.security.cert.X509CRL;
+import java.util.concurrent.CountDownLatch;
+import co.edu.icesi.signer.timestamp.TimeClient;
+import co.edu.icesi.signer.timestamp.TimeServer;
 import java.io.PrintStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -65,7 +72,8 @@ public final class Cli {
                   Writes the signature to <file>.sig unless --out is given.
                   Hashes: SHA-256 (default), SHA-512, SHA3-256, SHA3-512.
                   --previous signs the next version of a document, chained to its previous signature.
-              rsa-pss-signer verify <file> --sig <file.sig> (--pub <file.pub> | --cert <file.crt> --ca <ca.crt>)
+              rsa-pss-signer verify <file> --sig <file.sig>
+                                    (--pub <file.pub> | --cert <file.crt> --ca <ca.crt> [--crl <ca.crl>])
                                     [--expect-fingerprint <fingerprint>] [--previous <old.sig>]
                                     [--timestamp <file.tst> --tsa-pub <tsa.pub>]
                   Exit code: 0 VALID, 1 INVALID, 2 ERROR.
@@ -75,12 +83,22 @@ public final class Cli {
               rsa-pss-signer ca init --out <base> --name <authority name> [--days <n>]
                   Writes <base>.key (encrypted) and <base>.crt, a self-signed authority certificate.
               rsa-pss-signer ca issue --ca <base> --pub <signer.pub> --name <signer name> --out <file.crt> [--days <n>]
+              rsa-pss-signer ca revoke --ca <base> --cert <file.crt> [--days <n>]
+              rsa-pss-signer ca crl --ca <base> [--days <n>]
+                  Revokes a certificate, or only renews, the revocation list <base>.crl. It must be renewed
+                  before it expires (default: 30 days); verifiers reject an expired list.
               rsa-pss-signer tsa stamp <file.sig> --key <tsa.key> [--out <file.tst>]
                   Time-stamps a signature with the time authority's key and clock. Default: <file.sig>.tst.
+              rsa-pss-signer tsa serve --key <tsa.key> [--host <address>] [--port <n>]
+                  Runs the time authority as an HTTP service until stopped. Default: 127.0.0.1:8318.
+              rsa-pss-signer tsa request <file.sig> --url <http://host:port> [--out <file.tst>]
+                  Asks a running time authority for a time stamp, sending only the hash of <file.sig>.
             """;
 
     private static final int CA_DAYS = 1825;
     private static final int CERTIFICATE_DAYS = 365;
+    private static final int CRL_DAYS = 30;
+    private static final int TSA_PORT = 8318;
 
     private final PasswordProvider passwords;
     private final PrintStream out;
@@ -114,7 +132,7 @@ public final class Cli {
                     return sign(Arguments.parse(rest, 1, Set.of("--key", "--signer", "--hash", "--out", "--previous")));
                 case "verify":
                     return verify(Arguments.parse(rest, 1, Set.of("--sig", "--pub", "--cert", "--ca",
-                            "--expect-fingerprint", "--previous", "--timestamp", "--tsa-pub")));
+                            "--crl", "--expect-fingerprint", "--previous", "--timestamp", "--tsa-pub")));
                 case "trust":
                     return trust(rest);
                 case "ca":
@@ -250,6 +268,10 @@ public final class Cli {
         if ((pub == null) == (cert == null) || (cert == null) != (ca == null)) {
             throw new UsageException("Give either --pub, or --cert with --ca");
         }
+        String crl = arguments.optional("--crl", null);
+        if (crl != null && cert == null) {
+            throw new UsageException("--crl goes with --cert");
+        }
         String timestamp = arguments.optional("--timestamp", null);
         String tsaPub = arguments.optional("--tsa-pub", null);
         if ((timestamp == null) != (tsaPub == null)) {
@@ -257,7 +279,8 @@ public final class Cli {
         }
         PolicyVerifier.KeySource key = pub != null
                 ? new PolicyVerifier.PublicKeyFile(arguments.path(pub))
-                : new PolicyVerifier.Certificate(arguments.path(cert), arguments.path(ca));
+                : new PolicyVerifier.Certificate(arguments.path(cert), arguments.path(ca),
+                        crl == null ? null : arguments.path(crl));
         String previous = arguments.optional("--previous", null);
         VerificationOutcome outcome = new PolicyVerifier(state, clock).verify(new PolicyVerifier.Request(
                 arguments.path(arguments.positional()),
@@ -274,6 +297,10 @@ public final class Cli {
         }
         for (String note : outcome.notes()) {
             out.println("- " + note);
+        }
+        if (outcome.reason() != null && outcome.reason().key().equals("reason.key.changed")) {
+            out.println("To forget the pinned key: rsa-pss-signer trust remove \""
+                    + outcome.reason().args().get(0) + "\"");
         }
         if (outcome.result() == VerificationResult.VALID && cert == null) {
             out.println("This proves who holds this key, not who the person is: compare the"
@@ -306,7 +333,7 @@ public final class Cli {
     private int ca(List<String> args) throws UsageException, IOException, GeneralSecurityException,
             WrongPasswordException {
         if (args.isEmpty()) {
-            throw new UsageException("Use: ca init or ca issue");
+            throw new UsageException("Use: ca init, ca issue, ca revoke or ca crl");
         }
         List<String> rest = args.subList(1, args.size());
         switch (args.get(0)) {
@@ -344,22 +371,12 @@ public final class Cli {
             case "issue": {
                 Arguments arguments = Arguments.parse(rest, 0, Set.of("--ca", "--pub", "--name", "--out", "--days"));
                 String base = arguments.required("--ca");
-                Path keyFile = arguments.path(base + ".key");
                 X509Certificate authority = MiniCa.read(arguments.path(base + ".crt"));
                 RSAPublicKey signerKey = PublicKeyStore.read(arguments.path(arguments.required("--pub")));
                 String name = arguments.required("--name");
                 Path certFile = arguments.path(arguments.required("--out"));
                 int days = arguments.days(CERTIFICATE_DAYS);
-                char[] password = passwords.readPassword("Password for " + keyFile.getFileName());
-                RSAPrivateCrtKey authorityKey;
-                try {
-                    authorityKey = privateKeys.read(keyFile, password);
-                } finally {
-                    Arrays.fill(password, '\0');
-                }
-                if (!KeyPairService.publicKeyOf(authorityKey).equals(authority.getPublicKey())) {
-                    throw new GeneralSecurityException(keyFile + " is not the key of " + base + ".crt");
-                }
+                RSAPrivateCrtKey authorityKey = authorityKey(arguments, base, authority);
                 X509Certificate certificate;
                 try {
                     certificate = MiniCa.issue(authority, authorityKey, name, signerKey, Duration.ofDays(days), clock);
@@ -372,6 +389,31 @@ public final class Cli {
                         + ", valid for " + days + " days.");
                 return EXIT_OK;
             }
+            case "revoke":
+            case "crl": {
+                boolean revoking = args.get(0).equals("revoke");
+                Arguments arguments = Arguments.parse(rest, 0,
+                        revoking ? Set.of("--ca", "--cert", "--days") : Set.of("--ca", "--days"));
+                String base = arguments.required("--ca");
+                X509Certificate authority = MiniCa.read(arguments.path(base + ".crt"));
+                X509Certificate revoke = revoking ? MiniCa.read(arguments.path(arguments.required("--cert"))) : null;
+                Path crlFile = arguments.path(base + ".crl");
+                int days = arguments.days(CRL_DAYS);
+                X509CRL previous = Files.exists(crlFile) ? MiniCa.readRevocationList(crlFile) : null;
+                RSAPrivateCrtKey authorityKey = authorityKey(arguments, base, authority);
+                X509CRL list = MiniCa.revocationList(authority, authorityKey, previous, revoke,
+                        Duration.ofDays(days), clock);
+                AtomicFileWriter.replacePublic(crlFile, MiniCa.toPem(list));
+                out.println("Revocation list: " + crlFile);
+                if (revoke != null) {
+                    out.println("Revoked: \"" + MiniCa.commonName(revoke) + "\", serial " + revoke.getSerialNumber());
+                }
+                int count = list.getRevokedCertificates() == null ? 0 : list.getRevokedCertificates().size();
+                out.println(count + " certificate(s) revoked; renew it with ca crl before "
+                        + list.getNextUpdate().toInstant() + ".");
+                out.println("Verifiers must use the latest list: an older copy does not show recent revocations.");
+                return EXIT_OK;
+            }
             default:
                 throw new UsageException("Unknown ca command: " + args.get(0));
         }
@@ -379,8 +421,15 @@ public final class Cli {
 
     private int tsa(List<String> args) throws UsageException, IOException, GeneralSecurityException,
             WrongPasswordException {
-        if (args.isEmpty() || !args.get(0).equals("stamp")) {
-            throw new UsageException("Use: tsa stamp <file.sig> --key <tsa.key>");
+        String command = args.isEmpty() ? "" : args.get(0);
+        if (command.equals("serve")) {
+            return tsaServe(Arguments.parse(args.subList(1, args.size()), 0, Set.of("--key", "--host", "--port")));
+        }
+        if (command.equals("request")) {
+            return tsaRequest(Arguments.parse(args.subList(1, args.size()), 1, Set.of("--url", "--out")));
+        }
+        if (!command.equals("stamp")) {
+            throw new UsageException("Use: tsa stamp, tsa serve or tsa request");
         }
         Arguments arguments = Arguments.parse(args.subList(1, args.size()), 1, Set.of("--key", "--out"));
         Path sigFile = arguments.path(arguments.positional());
@@ -401,6 +450,66 @@ public final class Cli {
         out.println("Time:       " + token.time() + " (the authority's clock)");
         out.println("Authority:  " + token.authorityFingerprint());
         return EXIT_OK;
+    }
+
+    private int tsaServe(Arguments arguments) throws UsageException, IOException, GeneralSecurityException,
+            WrongPasswordException {
+        Path keyFile = arguments.path(arguments.required("--key"));
+        String host = arguments.optional("--host", "127.0.0.1");
+        int port = arguments.port(TSA_PORT);
+        char[] password = passwords.readPassword("Password for " + keyFile.getFileName());
+        RSAPrivateCrtKey authorityKey;
+        try {
+            authorityKey = privateKeys.read(keyFile, password);
+        } finally {
+            Arrays.fill(password, '\0');
+        }
+        KeyPairService.requireAllowed(KeyPairService.publicKeyOf(authorityKey));
+        try (TimeServer server = TimeServer.start(new InetSocketAddress(host, port), authorityKey, clock)) {
+            out.println("Time authority listening on http://" + host + ":" + server.port() + TimeServer.PATH);
+            out.println("Authority: " + KeyPairService.fingerprint(KeyPairService.publicKeyOf(authorityKey)));
+            out.println("Press Ctrl+C to stop.");
+            out.flush();
+            new CountDownLatch(1).await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return EXIT_OK;
+    }
+
+    private int tsaRequest(Arguments arguments) throws UsageException, IOException {
+        Path sigFile = arguments.path(arguments.positional());
+        Path output = arguments.path(arguments.optional("--out", arguments.positional() + ".tst"));
+        URI url;
+        try {
+            url = new URI(arguments.required("--url"));
+        } catch (URISyntaxException e) {
+            throw new UsageException("Invalid --url: " + e.getMessage());
+        }
+        TimeToken token = TimeClient.request(url, SafeFileReader.read(sigFile, SigFile.MAX_FILE_SIZE));
+        AtomicFileWriter.writePublic(output, token.toJson());
+        out.println("Time stamp: " + output);
+        out.println("Time:       " + token.time() + " (the authority's clock)");
+        out.println("Authority:  " + token.authorityFingerprint());
+        out.println("Check it with verify --timestamp and the authority's public key.");
+        return EXIT_OK;
+    }
+
+    /** Reads the authority's private key and checks that it matches its certificate. */
+    private RSAPrivateCrtKey authorityKey(Arguments arguments, String base, X509Certificate authority)
+            throws UsageException, IOException, GeneralSecurityException, WrongPasswordException {
+        Path keyFile = arguments.path(base + ".key");
+        char[] password = passwords.readPassword("Password for " + keyFile.getFileName());
+        RSAPrivateCrtKey authorityKey;
+        try {
+            authorityKey = privateKeys.read(keyFile, password);
+        } finally {
+            Arrays.fill(password, '\0');
+        }
+        if (!KeyPairService.publicKeyOf(authorityKey).equals(authority.getPublicKey())) {
+            throw new GeneralSecurityException(keyFile + " is not the key of " + base + ".crt");
+        }
+        return authorityKey;
     }
 
     private static final class UsageException extends Exception {
@@ -483,6 +592,19 @@ public final class Cli {
                 // Reported below, like any other value outside the allowlist
             }
             throw new UsageException("Key size not allowed: " + value);
+        }
+
+        int port(int defaultPort) throws UsageException {
+            String value = optional("--port", String.valueOf(defaultPort));
+            try {
+                int port = Integer.parseInt(value);
+                if (port >= 0 && port <= 65535) {
+                    return port;
+                }
+            } catch (NumberFormatException e) {
+                // Reported below
+            }
+            throw new UsageException("--port must be between 0 and 65535: " + value);
         }
 
         int days(int defaultDays) throws UsageException {
