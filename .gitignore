@@ -13,9 +13,12 @@ dist/
 !src/test/resources/**/*.key
 !src/test/resources/**/*.pem
 
-# Demo outputs (generated before the presentation)
+# Demo outputs (generated before the presentation); the scripts are committed
 demo/*
 !demo/README.md
+!demo/commands.sh
+!demo/commands.ps1
+!demo/DemoTools.java
 
 # IDEs
 .idea/

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.icesi.signer.format.SigFile;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
+import co.edu.icesi.signer.policy.TestState;
 import co.edu.icesi.signer.keystore.PublicKeyStore;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -60,7 +61,7 @@ class CliTest {
             return password;
         };
         cli = new Cli(spy, new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                new PrintStream(stderr, true, StandardCharsets.UTF_8), new PrivateKeyStore(1000), CLOCK);
+                new PrintStream(stderr, true, StandardCharsets.UTF_8), new PrivateKeyStore(1000), CLOCK, TestState.fresh());
     }
 
     private int run(String... args) {
@@ -367,5 +368,175 @@ class CliTest {
 
         assertEquals(2, exit);
         assertTrue(err().contains("missing"), err());
+    }
+
+    // Type 3: what is about to be signed is shown before the password
+    @Test
+    void signShowsTheFileAndItsHashBeforeSigning() throws Exception {
+        generateKeys("ana");
+        signContract();
+
+        assertTrue(out().contains("contract.txt (31 bytes)"), out());
+        assertTrue(out().contains("SHA-256:     " + java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(contract)))), out());
+        assertFalse(out().contains("Warning"), out());
+        assertTrue(out().contains("Version:     1"), out());
+    }
+
+    @Test
+    void signWarnsAboutFormatsThatCanHideContent() {
+        generateKeys("ana");
+        typedPasswords.add(PASSWORD);
+        Path pdf = dir.resolve("contract.pdf");
+        try {
+            Files.writeString(pdf, "%PDF-1.7");
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+
+        assertEquals(0, run("sign", pdf.toString(), "--key", path("ana.key"), "--signer", "Ana Perez"), err());
+
+        assertTrue(out().contains("Warning: This format can hide content"), out());
+    }
+
+    // T-2.6': the next version chains to the previous signature, and replay is detected
+    @Test
+    void signingTheNextVersionAndReplayingTheOldOne() throws Exception {
+        generateKeys("ana");
+        signContract();
+        Files.move(Path.of(contract + ".sig"), dir.resolve("v1.sig"));
+        Files.copy(contract, dir.resolve("v1.txt"));
+        Files.writeString(contract, "The parties agree to the new terms.");
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("sign", contract.toString(), "--key", path("ana.key"), "--signer", "Ana Perez",
+                "--previous", path("v1.sig")), err());
+        assertTrue(out().contains("Version:     2"), out());
+
+        assertEquals(0, run("verify", contract.toString(), "--sig", contract + ".sig", "--pub", path("ana.pub"),
+                "--previous", path("v1.sig")), out() + err());
+        assertTrue(out().contains("- Document version 2 of contract.txt."), out());
+        assertTrue(out().contains("- Follows v1.sig as its next version."), out());
+
+        Files.copy(dir.resolve("v1.txt"), contract, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        assertEquals(1, run("verify", contract.toString(), "--sig", path("v1.sig"), "--pub", path("ana.pub")));
+        assertTrue(out().contains("INVALID: Outdated version: this is version 1"), out());
+    }
+
+    @Test
+    void signRejectsAMalformedPreviousSignature() throws Exception {
+        generateKeys("ana");
+        Files.writeString(dir.resolve("bad.sig"), "not json");
+
+        assertEquals(2, run("sign", contract.toString(), "--key", path("ana.key"), "--signer", "Ana Perez",
+                "--previous", path("bad.sig")));
+        assertTrue(err().contains("invalid signature file"), err());
+        assertFalse(Files.exists(Path.of(contract + ".sig")));
+    }
+
+    // T-4.1b: the trust store, from the command line
+    @Test
+    void trustPinsListsAndForgetsKeys() throws Exception {
+        generateKeys("ana");
+        signContract();
+        assertEquals(0, verifyContract("ana.pub"), out() + err());
+        assertTrue(out().contains("its key is now pinned"), out());
+
+        assertEquals(0, run("trust", "list"));
+        assertTrue(out().contains("  Ana Perez"), out());
+
+        generateKeys("mallory");
+        Files.delete(Path.of(contract + ".sig"));
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("sign", contract.toString(), "--key", path("mallory.key"), "--signer", "Ana Perez"));
+        assertEquals(1, verifyContract("mallory.pub"));
+        assertTrue(out().contains("The key for \"Ana Perez\" changed"), out());
+
+        assertEquals(0, run("trust", "remove", "Ana Perez"));
+        assertEquals(2, run("trust", "remove", "Ana Perez"));
+        assertEquals(0, verifyContract("mallory.pub"));
+    }
+
+    @Test
+    void verifyComparesTheExpectedFingerprint() throws Exception {
+        generateKeys("ana");
+        signContract();
+
+        assertEquals(1, run("verify", contract.toString(), "--sig", contract + ".sig", "--pub", path("ana.pub"),
+                "--expect-fingerprint", "00:11"));
+        assertTrue(out().contains("not the one you expected"), out());
+    }
+
+    @Test
+    void verifyNeedsExactlyOneKeySource() {
+        assertEquals(2, run("verify", contract.toString(), "--sig", "x.sig"));
+        assertEquals(2, run("verify", contract.toString(), "--sig", "x.sig", "--pub", "a.pub", "--cert", "a.crt",
+                "--ca", "ca.crt"));
+        assertEquals(2, run("verify", contract.toString(), "--sig", "x.sig", "--cert", "a.crt"));
+        assertEquals(2, run("verify", contract.toString(), "--sig", "x.sig", "--pub", "a.pub", "--timestamp", "t"));
+        assertTrue(err().contains("--timestamp and --tsa-pub go together"), err());
+    }
+
+    // Type 2, level c: a mini-PKI from the command line
+    @Test
+    void anAuthorityIssuesACertificateThatVerifiesTheSigner() throws Exception {
+        typedPasswords.add(PASSWORD);
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("ca", "init", "--out", path("ca"), "--name", "ICESI Demo CA"), err());
+        generateKeys("ana");
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("ca", "issue", "--ca", path("ca"), "--pub", path("ana.pub"), "--name", "Ana Perez",
+                "--out", path("ana.crt")), err());
+        signContract();
+
+        assertEquals(0, run("verify", contract.toString(), "--sig", contract + ".sig", "--cert", path("ana.crt"),
+                "--ca", path("ca.crt")), out() + err());
+        assertTrue(out().contains("Certificate issued by \"ICESI Demo CA\""), out());
+        assertFalse(out().contains("independent channel"), out());
+    }
+
+    @Test
+    void issuingWithAKeyThatIsNotTheAuthoritysFails() throws Exception {
+        typedPasswords.add(PASSWORD);
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("ca", "init", "--out", path("ca"), "--name", "ICESI Demo CA"), err());
+        generateKeys("other");
+        Files.delete(dir.resolve("ca.key"));
+        Files.copy(dir.resolve("other.key"), dir.resolve("ca.key"));
+        typedPasswords.add(PASSWORD);
+
+        assertEquals(2, run("ca", "issue", "--ca", path("ca"), "--pub", path("other.pub"), "--name", "Ana Perez",
+                "--out", path("ana.crt")));
+        assertTrue(err().contains("is not the key of"), err());
+        assertFalse(Files.exists(dir.resolve("ana.crt")));
+    }
+
+    @Test
+    void caRejectsBadArguments() {
+        assertEquals(2, run("ca"));
+        assertEquals(2, run("ca", "revoke"));
+        assertEquals(2, run("ca", "init", "--out", path("ca"), "--name", "X", "--days", "0"));
+        assertTrue(err().contains("--days must be between"), err());
+    }
+
+    // Type 2, signing time: a time stamp from the authority's key and clock
+    @Test
+    void aTimeStampFromTheAuthorityIsShownWhenVerifying() throws Exception {
+        generateKeys("ana");
+        generateKeys("tsa");
+        signContract();
+        typedPasswords.add(PASSWORD);
+        assertEquals(0, run("tsa", "stamp", contract + ".sig", "--key", path("tsa.key")), err());
+        assertTrue(out().contains("Time:       2026-10-28T11:30:00-05:00"), out());
+
+        assertEquals(0, run("verify", contract.toString(), "--sig", contract + ".sig", "--pub", path("ana.pub"),
+                "--timestamp", contract + ".sig.tst", "--tsa-pub", path("tsa.pub")), out() + err());
+        assertTrue(out().contains("- Time stamp: this signature existed at 2026-10-28T11:30:00-05:00"), out());
+    }
+
+    @Test
+    void tsaRejectsBadArguments() {
+        assertEquals(2, run("tsa"));
+        assertEquals(2, run("tsa", "serve"));
+        assertEquals(2, run("trust", "forget"));
     }
 }

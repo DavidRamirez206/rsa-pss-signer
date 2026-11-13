@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.icesi.signer.gui.GuiActions.GeneratedKeys;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
+import co.edu.icesi.signer.policy.TestState;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,7 +25,7 @@ class SignOverwriteTest {
 
     private static final String PASSWORD = "correct horse battery";
 
-    private final GuiActions actions = new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC());
+    private final GuiActions actions = new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC(), TestState.fresh());
     private final List<String> asked = new ArrayList<>();
 
     @TempDir

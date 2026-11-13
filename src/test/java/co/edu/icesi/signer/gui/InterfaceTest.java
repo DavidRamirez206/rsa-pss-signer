@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import co.edu.icesi.signer.core.VerificationOutcome;
 import co.edu.icesi.signer.core.VerificationResult;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
+import co.edu.icesi.signer.policy.TestState;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Font;
@@ -40,7 +41,7 @@ class InterfaceTest {
     }
 
     private static AppShell shell() {
-        return new AppShell(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC()), () -> { }, language -> { });
+        return new AppShell(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC(), TestState.fresh()), () -> { }, language -> { });
     }
 
     private static void layOut(Component component) {

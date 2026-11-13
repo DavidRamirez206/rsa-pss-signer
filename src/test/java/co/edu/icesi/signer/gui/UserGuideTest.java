@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.icesi.signer.gui.I18n.Language;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
+import co.edu.icesi.signer.policy.TestState;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Clock;
 import javax.swing.SwingUtilities;
@@ -61,7 +62,7 @@ class UserGuideTest {
     }
 
     private static AppRoot root(Settings state) {
-        return new AppRoot(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC()), state);
+        return new AppRoot(new GuiActions(new PrivateKeyStore(1000), Clock.systemUTC(), TestState.fresh()), state);
     }
 
     private static void onEdt(Runnable test) throws InterruptedException, InvocationTargetException {

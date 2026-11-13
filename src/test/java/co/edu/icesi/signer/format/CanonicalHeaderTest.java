@@ -26,6 +26,30 @@ class CanonicalHeaderTest {
     @Test
     void canonicalStringHasTheExactSpecifiedFormat() {
         String expected = """
+                sigv2
+                version=2
+                hashAlg=SHA-256
+                pss.saltLen=32
+                pss.mgf=MGF1
+                pss.mgfHash=SHA-256
+                pss.trailer=1
+                keyFingerprint=3A:7F:0C
+                fileName=contract.pdf
+                signerName=Ana Perez
+                signedAt=2026-10-28T11:30:00-05:00
+                docVersion=3
+                prevSigHash=%s
+                """.formatted("ab".repeat(32));
+
+        CanonicalHeader header = CanonicalHeader.forSigning(HashAlg.SHA_256, FINGERPRINT, "contract.pdf",
+                "Ana Perez", SIGNED_AT, 3, "ab".repeat(32));
+        assertEquals(expected, header.toCanonicalString());
+    }
+
+    // Signatures made by v0.1.0 to v0.3.0 must keep verifying
+    @Test
+    void legacyCanonicalStringIsUnchanged() {
+        String expected = """
                 sigv1
                 version=1
                 hashAlg=SHA-256
@@ -39,7 +63,9 @@ class CanonicalHeaderTest {
                 signedAt=2026-10-28T11:30:00-05:00
                 """;
 
-        assertEquals(expected, header("contract.pdf", "Ana Perez").toCanonicalString());
+        CanonicalHeader legacy = new CanonicalHeader(1, HashAlg.SHA_256, 32, "MGF1", "SHA-256", 1, FINGERPRINT,
+                "contract.pdf", "Ana Perez", SIGNED_AT, 0, "");
+        assertEquals(expected, legacy.toCanonicalString());
     }
 
     @ParameterizedTest

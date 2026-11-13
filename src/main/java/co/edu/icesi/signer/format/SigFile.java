@@ -33,9 +33,19 @@ public record SigFile(CanonicalHeader header, byte[] signature) {
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .build();
 
-    private static final Set<String> TOP_LEVEL_FIELDS = Set.of(
+    private static final Pattern SHA256_HEX = Pattern.compile("[0-9a-f]{64}");
+
+    private static final Set<String> LEGACY_FIELDS = Set.of(
             "version", "hashAlg", "pss", "keyFingerprint", "fileName", "signerName", "signedAt", "signature");
+    private static final Set<String> TOP_LEVEL_FIELDS = Set.of(
+            "version", "hashAlg", "pss", "keyFingerprint", "fileName", "signerName", "signedAt",
+            "docVersion", "prevSigHash", "signature");
     private static final Set<String> PSS_FIELDS = Set.of("saltLen", "mgf", "mgfHash", "trailer");
+
+    /** Lowercase hex SHA-256 of a {@code .sig} file's bytes, as {@code prevSigHash} records it. */
+    public static String hashOf(byte[] sigFile) {
+        return java.util.HexFormat.of().formatHex(HashAlg.SHA_256.newDigest().digest(sigFile));
+    }
 
     /** Serializes to pretty-printed UTF-8 JSON. */
     public byte[] toJson() {
@@ -51,6 +61,10 @@ public record SigFile(CanonicalHeader header, byte[] signature) {
         root.put("fileName", header.fileName());
         root.put("signerName", header.signerName());
         root.put("signedAt", header.signedAt());
+        if (header.hasDocVersion()) {
+            root.put("docVersion", header.docVersion());
+            root.put("prevSigHash", header.prevSigHash());
+        }
         root.put("signature", Base64.getEncoder().encodeToString(signature));
         try {
             return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(root);
@@ -74,7 +88,15 @@ public record SigFile(CanonicalHeader header, byte[] signature) {
         if (root == null || !root.isObject()) {
             throw new SigValidationException("The signature file must be a JSON object");
         }
-        requireExactFields(root, TOP_LEVEL_FIELDS, "");
+        if (!root.has("version")) {
+            throw new SigValidationException("Missing field: version");
+        }
+        int version = integer(root, "version");
+        boolean legacy = version == CanonicalHeader.LEGACY_VERSION;
+        if (!legacy && version != CanonicalHeader.CURRENT_VERSION) {
+            throw new SigValidationException("Signature format version not supported: " + version);
+        }
+        requireExactFields(root, legacy ? LEGACY_FIELDS : TOP_LEVEL_FIELDS, "");
         JsonNode pss = root.get("pss");
         if (!pss.isObject()) {
             throw new SigValidationException("Field pss must be an object");
@@ -89,7 +111,7 @@ public record SigFile(CanonicalHeader header, byte[] signature) {
 
         try {
             CanonicalHeader header = new CanonicalHeader(
-                    integer(root, "version"),
+                    version,
                     hashAlg,
                     integer(pss, "saltLen"),
                     text(pss, "mgf"),
@@ -98,7 +120,9 @@ public record SigFile(CanonicalHeader header, byte[] signature) {
                     text(root, "keyFingerprint"),
                     text(root, "fileName"),
                     text(root, "signerName"),
-                    text(root, "signedAt"));
+                    text(root, "signedAt"),
+                    legacy ? 0 : integer(root, "docVersion"),
+                    legacy ? "" : text(root, "prevSigHash"));
             requireExpectedValues(header);
             return new SigFile(header, signature);
         } catch (IllegalArgumentException e) {
@@ -112,9 +136,6 @@ public record SigFile(CanonicalHeader header, byte[] signature) {
      */
     private static void requireExpectedValues(CanonicalHeader header) throws SigValidationException {
         HashAlg hash = header.hashAlg();
-        if (header.version() != CanonicalHeader.CURRENT_VERSION) {
-            throw new SigValidationException("Signature format version not supported: " + header.version());
-        }
         if (header.saltLen() != hash.digestLength()) {
             throw new SigValidationException("Field pss.saltLen must be " + hash.digestLength() + " for " + hash.jcaName());
         }
@@ -133,6 +154,20 @@ public record SigFile(CanonicalHeader header, byte[] signature) {
         String fileName = header.fileName();
         if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\")) {
             throw new SigValidationException("Field fileName must be a base name, without any path");
+        }
+        if (header.hasDocVersion()) {
+            if (header.docVersion() < 1) {
+                throw new SigValidationException("Field docVersion must be 1 or more");
+            }
+            boolean first = header.docVersion() == 1;
+            if (first != header.prevSigHash().isEmpty()) {
+                throw new SigValidationException(first
+                        ? "Field prevSigHash must be empty for version 1"
+                        : "Field prevSigHash must chain to the previous version");
+            }
+            if (!first && !SHA256_HEX.matcher(header.prevSigHash()).matches()) {
+                throw new SigValidationException("Field prevSigHash is not a lowercase hex SHA-256");
+            }
         }
     }
 
