@@ -55,9 +55,9 @@ The verifier returns an `enum VerificationResult { VALID, INVALID, ERROR }`, **n
 
 - **VALID**: the signature matches the file under that public key, and all format checks passed.
 
-- **INVALID**: correct format, but the signature does not verify (modified file, wrong key, signature of a different file).
+- **INVALID**: correct format, but the signature does not verify (modified file, signature of a different file), or a check beyond the cryptography failed (outdated version, changed key for a pinned signer, unexpected fingerprint).
 
-- **ERROR**: no decision could be made (missing file, malformed `.sig`, algorithm outside the allowlist, wrong key type).
+- **ERROR**: no decision could be made (missing file, malformed `.sig`, algorithm outside the allowlist, wrong key type, or a public key other than the one the `.sig` declares, see T-3.6).
 
 *Rejected alternative:* return `boolean` and throw exceptions for errors. Rejected because it invites a generic `catch` to collapse ERROR into `true` or `false`, which is exactly the most dangerous bug (section 4.3 of the audit). Distinguishing INVALID from ERROR also gives honest messages: "the signature does not match" is not the same as "the file is broken".
 
@@ -231,20 +231,22 @@ The `.sig` is UTF-8 JSON. **All fields except `signature` form the canonical hea
 
 | Field            | Type               | Required | Description                                                           |
 |------------------|--------------------|----------|-----------------------------------------------------------------------|
-| `version`        | integer            | yes      | `.sig` format version. Currently: `1`.                                |
+| `version`        | integer            | yes      | `.sig` format version. Currently `2`; `1` is still accepted.          |
 | `hashAlg`        | string (allowlist) | yes      | `SHA-256`, `SHA-512`, `SHA3-256`, `SHA3-512`.                         |
 | `pss`            | object             | yes      | `{ "saltLen": int, "mgf": "MGF1", "mgfHash": string, "trailer": 1 }`. |
 | `keyFingerprint` | hex string         | yes      | SHA-256 of the public key's DER `SubjectPublicKeyInfo`, as `AB:CD:...`. |
 | `fileName`       | string             | yes      | Only the file's **base name** (no path).                              |
 | `signerName`     | string             | yes      | Name declared by the signer (informational, but signed).              |
 | `signedAt`       | ISO-8601 string    | yes      | Signing date declared by the signer (not trusted time).               |
+| `docVersion`     | integer ≥ 1        | format 2 | Version of the signed document (see section i, Type 1B).              |
+| `prevSigHash`    | hex string         | format 2 | Lowercase hex SHA-256 of the previous version's `.sig` bytes; empty for version 1. |
 | `signature`      | Base64 string      | yes      | **Not** part of the header. Length = `modulusBytes`.                  |
 
 ### Canonical serialization of the signed header
 
 The problem: if the JSON were signed as-is, field order or whitespace could differ between signer and verifier (Jackson does not guarantee stable ordering with maps). That is why **the JSON is not signed**; instead a **canonical string built in a fixed order** is signed, independent of the serializer:
 
-    CANON = "sigv1\n"
+    CANON = "sigv2\n"
           + "version=" + version + "\n"
           + "hashAlg=" + hashAlg + "\n"
           + "pss.saltLen=" + saltLen + "\n"
@@ -255,6 +257,8 @@ The problem: if the JSON were signed as-is, field order or whitespace could diff
           + "fileName=" + fileName + "\n"
           + "signerName=" + signerName + "\n"
           + "signedAt=" + signedAt + "\n"
+          + "docVersion=" + docVersion + "\n"
+          + "prevSigHash=" + prevSigHash + "\n"
 
 The `CANON` string is encoded as UTF-8. The signed message is `M = CANON_bytes || digest(file)`, applied with **a single** `Signature` object: `update(CANON_bytes)`, `update(digest)`, `sign()`. On verification, `CANON` is rebuilt **from the already-validated `.sig` fields** and the file `digest` is recomputed. If someone edited a field, the rebuilt string differs and the signature does not verify.
 
@@ -262,19 +266,21 @@ The `CANON` string is encoded as UTF-8. The signed message is `M = CANON_bytes |
 
 ### Format version
 
-The `sigv1` prefix and `version=1` allow the format to evolve without breaking old signatures: a future verifier can recognize `version=2` and apply a different canonical construction. Today only version 1 exists.
+The prefix and `version` let the format evolve without breaking old signatures. **Version 2** (from the release after v0.3.0) adds `docVersion` and `prevSigHash`. **Version 1**, written by v0.1.0 to v0.3.0, has neither field and keeps verifying: its canonical string starts with `sigv1` and ends at `signedAt`, exactly as before. Each version accepts only its own set of fields, so the new fields cannot be added to a version 1 file.
 
 ### Full example
 
 ``` json
 {
-  "version": 1,
+  "version": 2,
   "hashAlg": "SHA-256",
   "pss": { "saltLen": 32, "mgf": "MGF1", "mgfHash": "SHA-256", "trailer": 1 },
   "keyFingerprint": "3A:7F:0C:91:...:DE",
   "fileName": "contract.pdf",
   "signerName": "Ana Perez",
   "signedAt": "2026-10-28T11:30:00-05:00",
+  "docVersion": 2,
+  "prevSigHash": "9f2c...e41a",
   "signature": "Qm9ndXNCYXNlNjRTaWduYXR1cmVCeXRlcy4uLg=="
 }
 ```
@@ -294,6 +300,8 @@ In this order; any failure → **ERROR**:
 5.  **`keyFingerprint`** in valid hex format.
 
 6.  **`signerName` / `fileName`** with no line breaks or control characters.
+
+6b. In format 2, **`docVersion` ≥ 1**, and **`prevSigHash`** empty exactly when `docVersion` is 1, otherwise 64 lowercase hex characters.
 
 7.  **`signature`** is valid Base64 and, once decoded, its length == `modulusBytes` of the supplied public key.
 
@@ -389,13 +397,13 @@ All tests from the audit that are still valid are kept, and those that change wh
 
 ### Updates from breaking limits (important)
 
-- **T-2.3 changes.** Before: "renaming the file stays VALID". Now the base name is signed, so **renaming → INVALID** when compared against the `.sig`. Since renaming can be legitimate, the decision (see section i, Type 1) is: INVALID with a message that distinguishes "name does not match" from "content modified". The test reflects that.
+- **T-2.3 does not change, by decision (2026-11-08).** The base name is signed and shown, but it is not compared with the file on disk: what a signature protects is the content, so renaming stays **VALID** (see section i, Type 1A).
 
-- **T-2.6 (replay)** goes from "cannot be detected" to "detected if there is a version number in the header and the verifier knows the current version".
+- **T-2.6 (replay)** goes from "cannot be detected" to "detected once this machine has verified a newer version, or when the verifier names the previous signature" (`docVersion`, `prevSigHash`).
 
 - **T-3.1** is no longer "unsigned metadata": every field is now signed, so mutating them gives INVALID.
 
-- **T-4.1** gains the trust-store sub-case (VALID_UNTRUSTED_KEY).
+- **T-4.1** gains the trust-store sub-case: the first key seen for a signer name is pinned (VALID, with a note) and a different key under that name gives INVALID.
 
 ### Test table
 
@@ -410,10 +418,10 @@ All tests from the audit that are still valid are kept, and those that change wh
 | T-1.6     | `.key` permissions          | generate in `@TempDir`                                     | permissions = 600 on POSIX; owner-only ACL on Windows                         | `KeyFilePermsTest`                         | I    |
 | T-2.1     | Flip one bit                | sign, flip 1 byte (start/middle/end)                       | INVALID (1)                                                                   | `TamperTest` (`@ParameterizedTest`)        | I    |
 | T-2.2     | Truncate / append bytes     | sizes 0,1,8191,8192,8193,3×8192+7; +`\0`, +`\n`, −1 byte   | hash == reference; mutations → INVALID                                        | `StreamingHashTest`                        | U/I  |
-| T-2.3′    | Rename the file             | sign `contract.txt`, verify as `contract_final.txt`        | INVALID (1) with "name does not match" message                                | `SignedNameTest`                           | I    |
+| T-2.3′    | Rename the file             | sign `contract.txt`, verify as `contract_final.txt`        | VALID (0): only the content counts; the signed name stays visible             | `PolicyVerifierTest`                       | I    |
 | T-2.4     | Malformed signature         | signatures of 0B, 255B, 1MB, zeros, 0xFF, random           | not VALID; no exception escapes the API                                       | `GarbageSignatureTest`                     | U    |
 | T-2.5     | Signature of another file   | sign A, verify B with A's sig                              | INVALID (1)                                                                   | `WrongFileTest`                            | I    |
-| T-2.6′    | Replay of an old version    | v1 sig presented when v2 is current                        | detected if the header carries a version (see i)                              | `ReplayVersionTest`                        | I    |
+| T-2.6′    | Replay of an old version    | v1 sig presented after v2 was verified; `--previous` chain | INVALID (1) "outdated version"; VALID again without local state (limit)        | `PolicyVerifierTest`, `CliTest`            | I    |
 | T-2.7     | Hash downgrade              | `hashAlg` = MD5, SHA-1, NONE, `sha-256`, `SHA-256 `        | ERROR (2)                                                                     | `HashAllowlistTest` (`@ParameterizedTest`) | U    |
 | T-2.7b    | Label ≠ actual signature    | `.sig` says SHA-512, signature made with SHA-256           | INVALID (1)                                                                   | `HashMismatchTest`                         | I    |
 | T-2.8     | v1.5 vs PSS                 | `SHA256withRSA` signature verified by the program          | INVALID (1)                                                                   | `PkcsVsPssTest`                            | I    |
@@ -425,7 +433,7 @@ All tests from the audit that are still valid are kept, and those that change wh
 | T-3.6     | Declared fingerprint ≠ key  | altered `keyFingerprint`                                   | ERROR (2), specific message                                                   | `FingerprintMismatchTest`                  | I    |
 | T-3.7     | Wrong key type              | EC `.pub`; `.key` as `.pub`; corrupt PEM                   | ERROR (2)                                                                     | `WrongKeyTypeTest` (`@ParameterizedTest`)  | U    |
 | T-4.1     | Public key substitution     | Mallory signs, hands over her `.pub`                       | VALID (0) + fingerprint in output; fingerprints differ                        | `KeySubstitutionTest`                      | I    |
-| T-4.1b    | Trust store                 | unpinned key / changed fingerprint                         | VALID_UNTRUSTED_KEY / alert                                                   | `TrustStoreTest`                           | I    |
+| T-4.1b    | Trust store                 | first key pinned / another key under the same name         | VALID (0) + "pinned" note / INVALID (1) "key changed"                          | `PolicyVerifierTest`, `CliTest`            | I    |
 | T-4.2     | Weak key                    | `.pub` of 512, 1024, 1536 bits                             | ERROR (2); 2048 → accepted                                                    | `WeakKeyTest` (`@ParameterizedTest`)       | U    |
 | T-4.2b    | Invalid exponent            | e = 1, 3, even                                             | ERROR (2)                                                                     | `BadExponentTest`                          | U    |
 | T-4.3     | Three states / codes        | battery of good and bad inputs                             | correct 0/1/2; nothing is VALID by mistake                                    | `ExitCodeTest`                             | C    |
@@ -506,17 +514,21 @@ Prepare **in advance** (see checklist): a `demo/` directory with `contract.txt` 
 
 **Demo 5 — OpenSSL interoperability (≈2 min).**
 
-1.  The program writes the rebuilt canonical message `m.bin` and the raw signature `signature.bin`.
+1.  `demo/DemoTools.java export` writes the rebuilt canonical message `m.bin` and the raw signature `signature.bin`.
 
-2.  Run: `openssl pkeyutl -verify -pubin -inkey ana.pub -sigfile signature.bin -in m.hash -pkeyopt digest:sha256 -pkeyopt rsa_padding_mode:pss -pkeyopt rsa_pss_saltlen:-1` (with `m.hash` = `openssl dgst -sha256 -binary m.bin`).
+2.  Run: `openssl dgst -sha256 -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:32 -sigopt rsa_mgf1_md:sha256 -verify ana.pub -signature signature.bin m.bin`.
 
 3.  Output: `Signature Verified Successfully`.
 
 - *What to say, without overclaiming:* "OpenSSL verifies **our canonical message**, not the .txt directly. This proves we implemented standard, interoperable PSS, not a homemade scheme."
 
-**Demo 6 (optional) — Rename / replay, before and after (≈2 min).**
+**Demo 6 — Replay of an old version (≈2 min).** See section i, Type 1B.
 
-- *Before:* without a signed name, renaming stayed VALID. *After:* with the name in the signed header, renaming gives **INVALID** with the message "name does not match". Also show the replay of an old version detected through the version number.
+**Demo 7 — Trust store: Mallory again (≈1 min).** Verify Ana's signature (key pinned), then Mallory's signature as "Ana Perez" with her own key → **INVALID: The key for "Ana Perez" changed**. Closes Demo 1.
+
+**Demo 8 (optional) — Mini-PKI and time stamp (≈3 min).** Verify with `--cert`/`--ca` instead of `--pub`, and with `--timestamp`; then a certificate for another name → INVALID.
+
+All commands, with the setup, are in `demo/commands.sh` and `demo/commands.ps1`.
 
 ### Plan B (if something fails live)
 
@@ -555,41 +567,35 @@ Three types: (1) broken by changing the design; (2) mitigated by shifting trust 
 
 ### Type 1 — Broken by changing the program's design
 
-**1A. Signed file name**
+**1A. Signed file name — decided not to enforce**
 
-- **Decision:** the base name goes into the signed header (`fileName`). Renaming → **INVALID**, not just a warning.
+- **Decision (2026-11-08):** the base name stays in the signed header (`fileName`) and is shown, but it is **not compared** with the name of the file on disk. Renaming stays **VALID**.
 
-- **Rationale:** renaming *can* be legitimate, but mixing "name changed" with "valid" forces the interface to display a name the signature does not back. We prefer an unambiguous result (INVALID) **with a message that distinguishes** "the content is intact but the name does not match (expected `X`)" from "the content was modified". That way the user knows they can verify again with the correct name, without believing the document is corrupt.
+- **Rationale:** a signature protects the content, and renaming a file is an everyday, legitimate operation (`contract_final_v2.pdf`). Turning it into INVALID would teach users to ignore INVALID. The name the signer used is still signed, so it cannot be changed in the `.sig` without breaking the signature, and it identifies the document for the version check (1B).
 
-- **Implementation note:** the canonical header is rebuilt from the `.sig` fields, so renaming the file on disk does not by itself break the cryptographic check. The verifier must explicitly compare the signed `fileName` with the actual base name of the file being verified; that comparison is what produces INVALID.
+- **What it does not solve:** someone can present a signed file under a misleading name. The verifier sees the signed name in the `.sig` and can compare it by eye.
 
-- **3-step demo:**
+- **Test:** T-2.3′, renaming stays VALID.
 
-  1.  *Without defense:* signature without the name in the header; renaming `contract.txt`→`contract_final.txt` stays **VALID**. The interface shows the new name as if it were endorsed.
+**1B. Replay of old versions — implemented**
 
-  2.  *With defense:* name in the signed header; renaming gives **INVALID** with "name does not match, expected contract.txt".
+- **Design:** the signed header carries `docVersion` (from 1) and `prevSigHash`, the SHA-256 of the previous version's `.sig` bytes, which chains each version to the one before (format version 2).
 
-  3.  *Does not solve:* it does not stop someone with the private key from signing the file under another name in the first place. It binds the name to *this* signature; it does not prohibit new signatures.
+- **Signing:** `sign --previous old.sig` signs the next version: `docVersion` = previous + 1 and `prevSigHash` = hash of `old.sig`. The previous version must have been signed with the same key, because versions are tracked per key. In the graphical interface, replacing an existing signature made with the same key does this automatically.
 
-- **Test:** `SignedNameTest` — rename → INVALID with the "name" message; intact content distinguished from modified content.
+- **Verifying:** after a VALID cryptographic check, the verifier compares `docVersion` with the highest version of that document (key fingerprint + signed file name) already verified on this machine, kept in `document-versions.properties` in the local state directory (`~/.rsa-pss-signer`, or `RSA_PSS_SIGNER_HOME`). A lower version gives **INVALID "Outdated version"**. `verify --previous old.sig` also checks that this signature is exactly the next version of `old.sig`.
 
-**1B. Replay of old versions**
-
-- **Design:** add a `docVersion` (integer) to the signed header and, optionally, `prevSigHash` (SHA-256 of the previous signature), chaining versions.
-
-- **What can be detected without a server or shared history:** that **this** `.sig` declares version N. The verifier can reject a version lower than one it already knows **if** it is told which one is current (via a parameter or a small local "last seen version" file). The `prevSigHash` chain makes it possible to check that a chain of versions is consistent *if the previous signatures are available*.
-
-- **What CANNOT be detected without that:** if the verifier has no state and is not told the current version, an old, valid `.sig` remains valid. A signature has no notion of "currency" on its own. That requires shared state or a third party.
+- **What CANNOT be detected:** on a machine that has never seen the newer version, or after deleting the local state, an old `.sig` is valid again. A signature has no notion of "current" on its own; that needs shared state or a third party.
 
 - **3-step demo:**
 
-  1.  *Without defense:* resend `contract_v1` + its signature when v2 already exists → **VALID**.
+  1.  *Without defense:* a format 1 signature (v0.3.0) has no version; replaying v1 after v2 stays **VALID**.
 
-  2.  *With defense:* with a signed `docVersion` and a local file `last_version=2`, verifying v1 gives **INVALID / "outdated version" alert**.
+  2.  *With defense:* sign v2 with `--previous v1.sig`, verify it, then present v1 again → **INVALID: Outdated version: this is version 1 of contract.txt, but version 2 was already verified on this machine**.
 
-  3.  *Does not solve:* without that local state (or on another machine), v1 is valid again. Currency does not live in the signature.
+  3.  *Does not solve:* with `RSA_PSS_SIGNER_HOME` pointing to an empty directory (another machine), v1 is **VALID** again.
 
-- **Test:** `ReplayVersionTest` — v1 with local state of v2 → alert; without state → VALID (documenting the limit).
+- **Tests:** `PolicyVerifierTest` (outdated version, chain, skipped versions, no state), `CliTest`, `GuiActionsTest`.
 
 ### Type 2 — Mitigated by shifting trust to a third party
 
@@ -611,7 +617,12 @@ Three types: (1) broken by changing the design; (2) mitigated by shifting trust 
 
 - **Mini-PKI (c):** feasible with Bouncy Castle (X.509 certificate generation and chain validation). Trust is shifted **to the CA**: if the CA signs a fake certificate, everything falls. It is not "the definitive solution"; it just moves the problem to a central point that must be protected.
 
-- **Tests:** `TrustStoreTest` (TOFU: pin, alert on change), `MiniPkiTest` (valid chain → VALID; certificate not issued by the CA → ERROR).
+- **Implemented:**
+  - **(a)** `verify --expect-fingerprint <fp>`: the fingerprint received through another channel; spaces, colons and case are ignored. A different key gives INVALID.
+  - **(b)** Trust on first use, automatic with `--pub` (CLI and interface): `trusted-keys.properties` in the local state directory maps signer name → fingerprint. The first valid signature pins the key with a note; another key under that name gives **INVALID "The key for … changed"**. `trust list` and `trust remove <name>` manage it.
+  - **(c)** Mini-PKI: `ca init` creates the authority (encrypted `.key` and self-signed `.crt`), `ca issue` signs a certificate that binds a name to a `.pub`, and `verify --cert <crt> --ca <ca.crt>` validates the chain with PKIX (issuer, validity, not an authority certificate) and requires the certificate's name to match `signerName`. Certificates are signed with RSASSA-PSS too. Nothing is pinned in this mode: the authority decides. There is no revocation.
+
+- **Tests:** `PolicyVerifierTest` (TOFU: pin, alert on change, removal, Mallory first), `ThirdPartyChecksTest` (valid chain → VALID; another authority, expired or authority certificate → ERROR; another name → INVALID), `CliTest`.
 
 **2B. Signing time**
 
@@ -635,11 +646,15 @@ Three types: (1) broken by changing the design; (2) mitigated by shifting trust 
 
   3.  *Does not solve:* if the server lies or its key is stolen, the date is false. We only shift trust from the signer to the server.
 
-- **Tests:** `DeclaredTimeTest` (the date is signed but comes from the signer), `ToyTimeServerTest` (the time token verifies against the server's key).
+- **Implemented:** the toy authority is a command run by whoever holds the authority's key, on its own machine and clock: `tsa stamp <file.sig> --key tsa.key` writes `<file.sig>.tst`, a strict JSON token with the SHA-256 of the `.sig`, the authority's time and fingerprint, signed with RSASSA-PSS. `verify --timestamp <file.tst> --tsa-pub tsa.pub` checks it and shows the time. A token for another `.sig`, from another key or with an edited time gives INVALID. Real RFC 3161 is shown with OpenSSL against a public TSA in the demo scripts, not in the program.
+
+- **Tests:** `ThirdPartyChecksTest` (valid token, another signature, another authority, backdated, malformed), `CliTest`.
 
 ### Type 3 — Not breakable
 
 **3A. What the user thought they saw when signing (WYSIWYS).** A `.docx`/`.pdf` can contain hidden text, fields, or macros. The signature guarantees the **bytes**, not the visual interpretation. **Partial mitigations, not a defense:** show size and SHA-256 before signing; warn on complex formats ("this format can hide content"). There is no cryptographic solution.
+
+- **Implemented:** `sign` prints the file's size and SHA-256 before asking for the password, and warns for PDF, Office, OpenDocument, RTF, HTML and SVG files. The interface shows the same warning in its result. `FileReviewTest` covers the list.
 
 **3B. Forging without the private key.** Not possible by attacking RSA-PSS; only possible through an **implementation flaw** (those in section g). That is why the tests focus there.
 

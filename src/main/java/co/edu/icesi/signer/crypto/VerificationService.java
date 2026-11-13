@@ -80,9 +80,11 @@ public final class VerificationService {
         }
     }
 
+    /** Detail of an INVALID that comes from the cryptography itself. */
+    public static final String MISMATCH = "The signature does not match the file and its signed metadata";
+
     private static VerificationOutcome invalid(String fingerprint) {
-        return new VerificationOutcome(VerificationResult.INVALID,
-                "The signature does not match the file and its signed metadata", fingerprint);
+        return new VerificationOutcome(VerificationResult.INVALID, MISMATCH, fingerprint);
     }
 
     private static VerificationOutcome error(String detail, String fingerprint) {

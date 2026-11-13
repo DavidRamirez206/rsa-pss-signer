@@ -152,7 +152,7 @@ class SignVerifyTest {
 
     private static CanonicalHeader copy(CanonicalHeader h, String fileName, String signerName, String signedAt) {
         return new CanonicalHeader(h.version(), h.hashAlg(), h.saltLen(), h.mgf(), h.mgfHash(), h.trailer(),
-                h.keyFingerprint(), fileName, signerName, signedAt);
+                h.keyFingerprint(), fileName, signerName, signedAt, h.docVersion(), h.prevSigHash());
     }
 
     @Test
@@ -161,7 +161,7 @@ class SignVerifyTest {
         SigFile sig = sign(file, ana, HashAlg.SHA_256);
         CanonicalHeader h = sig.header();
         CanonicalHeader mutated = new CanonicalHeader(h.version(), h.hashAlg(), 20, h.mgf(), "SHA-1", h.trailer(),
-                h.keyFingerprint(), h.fileName(), h.signerName(), h.signedAt());
+                h.keyFingerprint(), h.fileName(), h.signerName(), h.signedAt(), h.docVersion(), h.prevSigHash());
 
         assertResult(VerificationResult.INVALID,
                 VerificationService.verify(file, new SigFile(mutated, sig.signature()), publicKey(ana)));
@@ -174,7 +174,7 @@ class SignVerifyTest {
         SigFile sig = sign(file, ana, HashAlg.SHA_256);
         CanonicalHeader h = sig.header();
         CanonicalHeader relabeled = new CanonicalHeader(h.version(), HashAlg.SHA_512, 64, h.mgf(), "SHA-512",
-                h.trailer(), h.keyFingerprint(), h.fileName(), h.signerName(), h.signedAt());
+                h.trailer(), h.keyFingerprint(), h.fileName(), h.signerName(), h.signedAt(), h.docVersion(), h.prevSigHash());
 
         assertResult(VerificationResult.INVALID,
                 VerificationService.verify(file, new SigFile(relabeled, sig.signature()), publicKey(ana)));
@@ -238,7 +238,7 @@ class SignVerifyTest {
         CanonicalHeader h = sig.header();
         CanonicalHeader forged = new CanonicalHeader(h.version(), h.hashAlg(), h.saltLen(), h.mgf(), h.mgfHash(),
                 h.trailer(), KeyPairService.fingerprint(mallory.getPublic()), h.fileName(), h.signerName(),
-                h.signedAt());
+                h.signedAt(), h.docVersion(), h.prevSigHash());
 
         assertResult(VerificationResult.ERROR,
                 VerificationService.verify(file, new SigFile(forged, sig.signature()), publicKey(ana)));

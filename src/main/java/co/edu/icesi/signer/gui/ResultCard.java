@@ -56,6 +56,13 @@ final class ResultCard extends Card {
     }
 
     /** The tone of the last result shown. */
+    private List<String> shownLines = List.of();
+
+    /** The detail lines last shown. */
+    List<String> lines() {
+        return shownLines;
+    }
+
     Tone tone() {
         return shown;
     }
@@ -67,6 +74,7 @@ final class ResultCard extends Card {
      */
     void show(Tone tone, String title, List<String> lines, String fingerprint, String note) {
         shown = tone;
+        shownLines = List.copyOf(lines);
         colors(new Color(tone.color.getRed(), tone.color.getGreen(), tone.color.getBlue(), 0x14),
                 new Color(tone.color.getRed(), tone.color.getGreen(), tone.color.getBlue(), 0x70));
         icon.setIcon(switch (tone) {

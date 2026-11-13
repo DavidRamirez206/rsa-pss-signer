@@ -63,7 +63,7 @@ class SigExpectedValuesTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"0", "2", "-1"})
+    @CsvSource({"0", "3", "-1"})
     void rejectsAnUnsupportedVersion(String version) {
         assertRejected(sig("SHA-256", "32", "MGF1", "SHA-256", "1", version, FINGERPRINT, "a.txt"), "version");
     }

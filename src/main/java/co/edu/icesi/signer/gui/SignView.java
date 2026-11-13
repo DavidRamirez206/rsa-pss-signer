@@ -8,6 +8,7 @@ import co.edu.icesi.signer.gui.Widgets.PrimaryButton;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 import javax.swing.JComboBox;
@@ -87,11 +88,15 @@ final class SignView extends View {
         String keyFile = key.value();
         String name = signer.getText();
         HashAlg alg = HashAlg.fromJcaName((String) hash.getSelectedItem()).orElse(HashAlg.SHA_256);
-        run(sign, () -> actions.sign(input, keyFile, name, alg, typed, overwrite), signature -> result.show(
-                Tone.SUCCESS,
-                t("sign.done"),
-                List.of(t("sign.done.signature", signature.file())),
-                signature.fingerprint(),
-                t("sign.done.note")));
+        run(sign, () -> actions.sign(input, keyFile, name, alg, typed, overwrite), signature -> {
+            List<String> lines = new ArrayList<>(List.of(
+                    t("sign.done.signature", signature.file()),
+                    t("sign.done.version", signature.docVersion())));
+            if (signature.canHideContent()) {
+                lines.add(t("sign.done.format"));
+            }
+            result.show(signature.canHideContent() ? Tone.CAUTION : Tone.SUCCESS, t("sign.done"), lines,
+                    signature.fingerprint(), t("sign.done.note"));
+        });
     }
 }

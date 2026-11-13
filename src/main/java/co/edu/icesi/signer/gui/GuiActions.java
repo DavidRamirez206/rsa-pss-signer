@@ -3,16 +3,20 @@ package co.edu.icesi.signer.gui;
 import static co.edu.icesi.signer.gui.I18n.t;
 
 import co.edu.icesi.signer.cli.Cli;
+import co.edu.icesi.signer.core.FileReview;
 import co.edu.icesi.signer.core.VerificationOutcome;
 import co.edu.icesi.signer.crypto.HashAlg;
 import co.edu.icesi.signer.crypto.KeyPairService;
 import co.edu.icesi.signer.crypto.SigningService;
-import co.edu.icesi.signer.crypto.VerificationService;
 import co.edu.icesi.signer.format.SigFile;
+import co.edu.icesi.signer.format.SigValidationException;
 import co.edu.icesi.signer.io.AtomicFileWriter;
+import co.edu.icesi.signer.io.SafeFileReader;
 import co.edu.icesi.signer.keystore.PrivateKeyStore;
 import co.edu.icesi.signer.keystore.PublicKeyStore;
 import co.edu.icesi.signer.keystore.WrongPasswordException;
+import co.edu.icesi.signer.policy.LocalState;
+import co.edu.icesi.signer.policy.PolicyVerifier;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -46,15 +50,22 @@ final class GuiActions {
     record GeneratedKeys(Path privateKey, Path publicKey, String fingerprint) {
     }
 
-    record Signature(Path file, String fingerprint) {
+    /**
+     * @param docVersion the document version signed: the previous one plus 1 when replacing
+     *     a signature made with the same key
+     * @param canHideContent whether the file's format can hide content from the screen
+     */
+    record Signature(Path file, String fingerprint, int docVersion, boolean canHideContent) {
     }
 
     private final PrivateKeyStore privateKeys;
     private final Clock clock;
+    private final PolicyVerifier verifier;
 
-    GuiActions(PrivateKeyStore privateKeys, Clock clock) {
+    GuiActions(PrivateKeyStore privateKeys, Clock clock, LocalState state) {
         this.privateKeys = privateKeys;
         this.clock = clock;
+        this.verifier = new PolicyVerifier(state, clock);
     }
 
     GeneratedKeys generateKeys(String base, int bits, char[] password, char[] confirmation) throws ActionFailure {
@@ -122,13 +133,16 @@ final class GuiActions {
                 throw new ActionFailure(t("failure.signature.is.key"));
             }
             RSAPrivateCrtKey privateKey = privateKeys.read(keyFile, password);
-            SigFile sig = SigningService.sign(input, privateKey, hash, signer.strip(), SigningService.timestamp(clock));
+            SigningService.Chain chain = overwrite ? chainAfter(output, privateKey) : SigningService.Chain.FIRST;
+            SigFile sig = SigningService.sign(
+                    input, privateKey, hash, signer.strip(), SigningService.timestamp(clock), chain);
             if (overwrite) {
                 AtomicFileWriter.replacePublic(output, sig.toJson());
             } else {
                 AtomicFileWriter.writePublic(output, sig.toJson());
             }
-            return new Signature(output, sig.header().keyFingerprint());
+            return new Signature(output, sig.header().keyFingerprint(), chain.docVersion(),
+                    FileReview.canHideContent(input.getFileName().toString()));
         } catch (WrongPasswordException e) {
             throw new ActionFailure(t("failure.password.wrong"));
         } catch (IllegalArgumentException e) {
@@ -140,11 +154,26 @@ final class GuiActions {
         }
     }
 
+    /**
+     * Replacing a signature made with the same key signs the next version of the document.
+     * Anything else (unreadable, legacy or another key's signature) starts again at version 1.
+     */
+    private static SigningService.Chain chainAfter(Path previous, RSAPrivateCrtKey privateKey)
+            throws GeneralSecurityException {
+        String fingerprint = KeyPairService.fingerprint(KeyPairService.publicKeyOf(privateKey));
+        try {
+            SigningService.Chain chain = SigningService.Chain.after(SafeFileReader.read(previous, SigFile.MAX_FILE_SIZE));
+            return fingerprint.equals(chain.keyFingerprint()) ? chain : SigningService.Chain.FIRST;
+        } catch (IOException | SigValidationException e) {
+            return SigningService.Chain.FIRST;
+        }
+    }
+
     VerificationOutcome verify(String file, String sig, String publicKey) throws ActionFailure {
         if (file.isBlank() || sig.isBlank() || publicKey.isBlank()) {
             throw new ActionFailure(t("failure.choose.verify"));
         }
-        return VerificationService.verify(path(file), path(sig), path(publicKey));
+        return verifier.verify(PolicyVerifier.Request.of(path(file), path(sig), path(publicKey)));
     }
 
     private static Path path(String value) throws ActionFailure {
