@@ -9,7 +9,9 @@ say at each step.
 | `commands.ps1` | The same on Windows: `.\demo\commands.ps1 setup`, then `.\demo\commands.ps1 1` |
 | `DemoTools.java` | Helpers the program does not offer: keys with a chosen iteration count, brute force, and the export for OpenSSL |
 
-Run them from the repository root after `mvn package`, in a real terminal. `setup` asks for a
+Run them from the repository root after `mvn package`, in a real terminal. For demo 8, start the
+time authority first in a second terminal with `demo/commands.sh tsa` (`.\demo\commands.ps1 tsa`),
+and stop it with Ctrl+C afterwards. `setup` asks for a
 password many times: use the same long demo password every time, never a real one.
 
 Everything they generate goes to `demo/work/`, which git ignores: keys and signatures are never
@@ -25,7 +27,7 @@ own machine, so the demos can be repeated in any order. To start again, delete `
 | 5 | OpenSSL verifies the same signature |
 | 6 | Replay of an old version detected, and the limit on another machine |
 | 7 | Trust on first use flags Mallory, the expected fingerprint, and the limit if she comes first |
-| 8 | Certificate authority, time stamp, and a real RFC 3161 time stamp (needs internet) |
+| 8 | Certificate authority and revocation, time stamps from a command and from a running service, and a real RFC 3161 time stamp (needs internet) |
 | 9 | The format warning before signing a PDF |
 
 Plan B if something fails live: the output of a previous `demo/commands.sh all` run, saved as

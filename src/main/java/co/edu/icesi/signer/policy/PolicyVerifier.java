@@ -1,5 +1,6 @@
 package co.edu.icesi.signer.policy;
 
+import co.edu.icesi.signer.core.Message;
 import co.edu.icesi.signer.core.VerificationOutcome;
 import co.edu.icesi.signer.core.VerificationResult;
 import co.edu.icesi.signer.crypto.KeyPairService;
@@ -15,6 +16,7 @@ import co.edu.icesi.signer.timestamp.TimeToken;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
+import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Clock;
@@ -38,8 +40,15 @@ public final class PolicyVerifier {
     public record PublicKeyFile(Path file) implements KeySource {
     }
 
-    /** A certificate, validated against the authority that must have issued it. */
-    public record Certificate(Path certificate, Path authority) implements KeySource {
+    /**
+     * A certificate, validated against the authority that must have issued it and, when
+     * {@code revocationList} is given, checked against that authority's revocation list.
+     */
+    public record Certificate(Path certificate, Path authority, Path revocationList) implements KeySource {
+
+        public Certificate(Path certificate, Path authority) {
+            this(certificate, authority, null);
+        }
     }
 
     /**
@@ -81,15 +90,24 @@ public final class PolicyVerifier {
         RSAPublicKey publicKey;
         X509Certificate certificate = null;
         X509Certificate authority = null;
+        X509CRL revocationList = null;
         try {
             if (request.key() instanceof Certificate source) {
                 certificate = MiniCa.read(source.certificate());
                 authority = MiniCa.read(source.authority());
                 MiniCa.validate(certificate, authority, clock);
+                if (source.revocationList() != null) {
+                    revocationList = MiniCa.readRevocationList(source.revocationList());
+                    MiniCa.checkRevocation(certificate, revocationList, authority, clock);
+                }
                 publicKey = (RSAPublicKey) certificate.getPublicKey();
             } else {
                 publicKey = PublicKeyStore.read(((PublicKeyFile) request.key()).file());
             }
+        } catch (MiniCa.RevokedException e) {
+            String fingerprint = fingerprintOrNull(certificate);
+            return VerificationOutcome.because(VerificationResult.INVALID,
+                    Message.of("reason.certificate.revoked", e.revokedAt().toString()), fingerprint);
         } catch (IOException | GeneralSecurityException e) {
             return error("Could not use the signer's key: " + describe(e), null);
         }
@@ -100,77 +118,72 @@ public final class PolicyVerifier {
         }
         String fingerprint = outcome.keyFingerprint();
         CanonicalHeader header = sig.header();
-        List<String> notes = new ArrayList<>();
+        List<Message> notes = new ArrayList<>();
 
         try {
             if (request.expectedFingerprint() != null
                     && !normalize(request.expectedFingerprint()).equals(normalize(fingerprint))) {
-                return invalid("The key is not the one you expected: expected " + request.expectedFingerprint()
-                        + ", but the signature was made with " + fingerprint, fingerprint);
+                return invalid(Message.of("reason.fingerprint.unexpected", request.expectedFingerprint(),
+                        fingerprint), fingerprint);
             }
             if (request.expectedFingerprint() != null) {
-                notes.add("The key matches the fingerprint you expected.");
+                notes.add(Message.of("note.expected"));
             }
 
             if (certificate != null) {
                 String certified = MiniCa.commonName(certificate);
                 if (!certified.equals(header.signerName())) {
-                    return invalid("The certificate is for \"" + certified + "\", but the signature names \""
-                            + header.signerName() + "\"", fingerprint);
+                    return invalid(Message.of("reason.certificate.name", certified, header.signerName()),
+                            fingerprint);
                 }
-                notes.add("Certificate issued by \"" + MiniCa.commonName(authority) + "\": this key belongs to \""
-                        + certified + "\", as far as that authority is trusted.");
+                notes.add(Message.of("note.certificate", MiniCa.commonName(authority), certified));
+                notes.add(revocationList != null
+                        ? Message.of("note.revocation.checked", revocationList.getThisUpdate().toInstant().toString())
+                        : Message.of("note.revocation.unchecked"));
             }
 
             if (request.previous() != null) {
-                String problem = chainProblem(header, SafeFileReader.read(request.previous(), SigFile.MAX_FILE_SIZE),
-                        request.previous());
+                Message problem = chainProblem(header,
+                        SafeFileReader.read(request.previous(), SigFile.MAX_FILE_SIZE), request.previous());
                 if (problem != null) {
                     return invalid(problem, fingerprint);
                 }
-                notes.add("Follows " + request.previous().getFileName() + " as its next version.");
+                notes.add(Message.of("note.follows", request.previous().getFileName().toString()));
             }
 
             if (request.timeStamp() != null) {
                 if (request.timeAuthority() == null) {
-                    return error("A time stamp needs the authority's public key to be checked", fingerprint);
+                    return VerificationOutcome.because(VerificationResult.ERROR,
+                            Message.of("reason.timestamp.key.missing"), fingerprint);
                 }
                 TimeToken token = TimeToken.parse(SafeFileReader.read(request.timeStamp(), TimeToken.MAX_FILE_SIZE));
-                String problem = TimeAuthority.problem(token, sigBytes, PublicKeyStore.read(request.timeAuthority()));
+                Message problem = TimeAuthority.problem(token, sigBytes, PublicKeyStore.read(request.timeAuthority()));
                 if (problem != null) {
                     return invalid(problem, fingerprint);
                 }
-                notes.add("Time stamp: this signature existed at " + token.time()
-                        + ", according to the authority " + token.authorityFingerprint() + ".");
+                notes.add(Message.of("note.timestamp", token.time(), token.authorityFingerprint()));
             }
 
             boolean pinNow = false;
             if (certificate == null) {
                 Optional<String> pinned = trust.pinned(header.signerName());
                 if (pinned.isPresent() && !pinned.get().equals(fingerprint)) {
-                    return invalid("The key for \"" + header.signerName() + "\" changed: this machine pinned "
-                            + pinned.get() + ", but this signature was made with " + fingerprint
-                            + ". If the change is legitimate, confirm the new fingerprint with the signer and run:"
-                            + " rsa-pss-signer trust remove \"" + header.signerName() + "\"", fingerprint);
+                    return invalid(Message.of("reason.key.changed", header.signerName(), pinned.get(), fingerprint),
+                            fingerprint);
                 }
                 pinNow = pinned.isEmpty();
-                notes.add(pinNow
-                        ? "First signature from \"" + header.signerName() + "\" on this machine: its key is now"
-                                + " pinned, and a different key under that name will be flagged."
-                        : "Same key as the one pinned for \"" + header.signerName() + "\" on this machine.");
+                notes.add(Message.of(pinNow ? "note.pinned.first" : "note.pinned.same", header.signerName()));
             }
 
             if (header.hasDocVersion()) {
                 int seen = versions.highestSeen(fingerprint, header.fileName());
                 if (header.docVersion() < seen) {
-                    return invalid("Outdated version: this is version " + header.docVersion() + " of "
-                            + header.fileName() + ", but version " + seen + " was already verified on this machine",
+                    return invalid(Message.of("reason.outdated", header.docVersion(), header.fileName(), seen),
                             fingerprint);
                 }
-                notes.add("Document version " + header.docVersion() + " of " + header.fileName() + ".");
+                notes.add(Message.of("note.version", header.docVersion(), header.fileName()));
             } else {
-                notes.add("Signature format 1 has no document version, so an old version presented as"
-                        + " current cannot be detected.");
+                notes.add(Message.of("note.legacy"));
             }
 
             if (pinNow) {
@@ -182,11 +195,11 @@ public final class PolicyVerifier {
         } catch (IOException | GeneralSecurityException e) {
             return error("Could not complete the checks: " + describe(e), fingerprint);
         }
-        return new VerificationOutcome(VerificationResult.VALID, outcome.detail(), fingerprint, notes);
+        return new VerificationOutcome(VerificationResult.VALID, outcome.detail(), fingerprint, notes, null);
     }
 
     /** Why {@code header} is not the next version of the {@code .sig} in {@code previous}, or null. */
-    static String chainProblem(CanonicalHeader header, byte[] previous, Path previousFile) throws IOException {
+    static Message chainProblem(CanonicalHeader header, byte[] previous, Path previousFile) throws IOException {
         CanonicalHeader before;
         try {
             before = SigFile.parse(previous).header();
@@ -194,12 +207,12 @@ public final class PolicyVerifier {
             throw new IOException("Could not read the previous signature: " + e.getMessage(), e);
         }
         if (!header.hasDocVersion() || !header.prevSigHash().equals(SigFile.hashOf(previous))) {
-            return "This signature does not follow " + previousFile.getFileName() + ": it is not its next version";
+            return Message.of("reason.chain.broken", previousFile.getFileName().toString());
         }
         int expected = Math.max(before.docVersion(), 1) + 1;
         if (header.docVersion() != expected) {
-            return "This signature follows " + previousFile.getFileName() + " but claims version "
-                    + header.docVersion() + " instead of " + expected;
+            return Message.of("reason.chain.version", previousFile.getFileName().toString(), header.docVersion(),
+                    expected);
         }
         return null;
     }
@@ -216,8 +229,16 @@ public final class PolicyVerifier {
         return e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
     }
 
-    private static VerificationOutcome invalid(String detail, String fingerprint) {
-        return new VerificationOutcome(VerificationResult.INVALID, detail, fingerprint);
+    private static VerificationOutcome invalid(Message reason, String fingerprint) {
+        return VerificationOutcome.because(VerificationResult.INVALID, reason, fingerprint);
+    }
+
+    private static String fingerprintOrNull(X509Certificate certificate) {
+        try {
+            return KeyPairService.fingerprint((RSAPublicKey) certificate.getPublicKey());
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private static VerificationOutcome error(String detail, String fingerprint) {

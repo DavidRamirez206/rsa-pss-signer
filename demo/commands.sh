@@ -4,6 +4,7 @@
 #   demo/commands.sh setup      once, the day before: keys, signatures, certificates
 #   demo/commands.sh 1 ... 9    one demo
 #   demo/commands.sh all        every demo in order
+#   demo/commands.sh tsa        the time authority as a service, in a second terminal (demo 8)
 #
 # Run from a real terminal (the program reads passwords from the console). Every
 # password prompt takes the same long demo password. Needs `mvn package` first.
@@ -65,6 +66,8 @@ setup() {
     signer ca init --out ca --name "ICESI Demo CA" || exit 1
     signer ca issue --ca ca --pub ana.pub --name "Ana Perez" --out ana.crt || exit 1
     signer ca issue --ca ca --pub mallory.pub --name "Mallory" --out mallory.crt || exit 1
+    signer ca crl --ca ca || exit 1
+    cp ca.crl ca-empty.crl
     signer keygen --out tsa || exit 1
     signer tsa stamp contract.txt.sig --key tsa.key || exit 1
 
@@ -152,9 +155,22 @@ demo8() {
     step signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt
     step signer verify mallory/contract.txt --sig mallory/contract.txt.sig --cert mallory.crt --ca ca.crt
     pause
+    say "Ana's laptop is stolen: the authority revokes her certificate"
+    cp ca-empty.crl ca.crl
+    step signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt --crl ca.crl
+    step signer ca revoke --ca ca --cert ana.crt
+    step signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt --crl ca.crl
+    say "The limit: whoever does not get the new list still accepts the key"
+    step signer verify contract.txt --sig contract.txt.sig --cert ana.crt --ca ca.crt --crl ca-empty.crl
+    pause
     say "Time stamp from the time authority: the date no longer comes from Ana alone"
     step signer verify contract.txt --sig contract.txt.sig --pub ana.pub \
         --timestamp contract.txt.sig.tst --tsa-pub tsa.pub
+    say "The same from the authority as a service (demo/commands.sh tsa in another terminal)"
+    rm -f contract.txt.sig.live.tst
+    step signer tsa request contract.txt.sig --url http://127.0.0.1:8318 --out contract.txt.sig.live.tst
+    step signer verify contract.txt --sig contract.txt.sig --pub ana.pub \
+        --timestamp contract.txt.sig.live.tst --tsa-pub tsa.pub
     pause
     say "Real RFC 3161 time stamp from a public authority (needs internet)"
     mkdir -p rfc3161
@@ -177,10 +193,11 @@ demo9() {
 
 case "${1:-}" in
     setup) setup ;;
+    tsa) cd "$WORK" 2> /dev/null || { echo "Run: demo/commands.sh setup"; exit 1; }; signer tsa serve --key tsa.key ;;
     [1-9]) cd "$WORK" 2> /dev/null || { echo "Run: demo/commands.sh setup"; exit 1; }; "demo$1" ;;
     all)
         cd "$WORK" 2> /dev/null || { echo "Run: demo/commands.sh setup"; exit 1; }
         for n in 1 2 3 4 5 6 7 8 9; do "demo$n"; pause; done
         ;;
-    *) sed -n '2,10p' "$0"; exit 2 ;;
+    *) sed -n '2,11p' "$0"; exit 2 ;;
 esac
