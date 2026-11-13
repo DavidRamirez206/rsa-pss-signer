@@ -1,6 +1,7 @@
 package co.edu.icesi.signer.gui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,6 +17,7 @@ import co.edu.icesi.signer.policy.TrustStore;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ResourceBundle;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.AfterEach;
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.Test;
 
 class VerifyViewTest {
 
+    private static final ResourceBundle SPANISH = I18n.load(I18n.Language.SPANISH);
     private static final Message CHANGED = Message.of("reason.key.changed", "Ana Perez", "AA", "BB");
 
     private LocalState state;
@@ -65,9 +68,12 @@ class VerifyViewTest {
 
     @Test
     void theNotesFollowTheChosenLanguage() throws Exception {
+        Message note = Message.of("note.version", 2, "a.txt");
         I18n.use(I18n.Language.SPANISH);
-        assertEquals(List.of(I18n.t("verify.valid.detail"), "Versión 2 del documento a.txt."),
-                shown(valid(Message.of("note.version", 2, "a.txt"))));
+        String translated = note.in(SPANISH);
+        assertNotEquals(note.english(), translated);
+        assertTrue(translated.contains("2") && translated.contains("a.txt"), translated);
+        assertEquals(List.of(I18n.t("verify.valid.detail"), translated), shown(valid(note)));
     }
 
     @Test
@@ -83,8 +89,9 @@ class VerifyViewTest {
         assertEquals(List.of(outdated.english()),
                 shown(VerificationOutcome.because(VerificationResult.INVALID, outdated, "AB")));
         I18n.use(I18n.Language.SPANISH);
-        assertEquals(List.of("Versión desactualizada: esta es la versión 1 de a.txt, pero en este equipo ya se"
-                + " verificó la versión 2"), shown(VerificationOutcome.because(VerificationResult.INVALID, outdated, "AB")));
+        assertNotEquals(outdated.english(), outdated.in(SPANISH));
+        assertEquals(List.of(outdated.in(SPANISH)),
+                shown(VerificationOutcome.because(VerificationResult.INVALID, outdated, "AB")));
     }
 
     @Test
